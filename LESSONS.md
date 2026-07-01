@@ -106,3 +106,39 @@ repository. Read it at the start of every session before making changes.
   `beforeEach` and `vi.unstubAllGlobals()` in `afterEach`, resolving the mock with a real
   `new Response(JSON.stringify(body), { status, headers })` so `.json()`/`.ok` behave exactly
   like a real fetch response.
+
+## Publishing to npm for `npx` usage (2026-07)
+
+- To make a server runnable as `npx <name>`, it must be a published npm package (unscoped, and
+  `private: true` removed from `package.json`) — `npx github:user/repo` also works without
+  publishing, but is slower and doesn't get clean version pinning; the user chose the registry
+  route here.
+- `regionecalabria-opendata-mcp` was free/unavailable-check via `npm view <name>` returning 404
+  (confirmed 2026-07-02) — always check name availability with `npm view`, not assumption.
+- npm **trusted publishing** (OIDC, no long-lived `NPM_TOKEN`) requires npm CLI `>=11.5.1` and
+  Node `>=22.14.0`; add an explicit `npm install -g npm@latest` step in CI since the bundled npm
+  on a given `actions/setup-node` Node version can be older than that.
+- Trusted publisher config lives on the *existing* npm package's Settings page on npmjs.com —
+  you cannot configure it before the package exists. **First publish must be manual**
+  (`npm login` + `npm publish --access public`, needs 2FA or a bypass-2FA granular token); only
+  subsequent releases can go through the trusted-publishing GitHub Actions workflow.
+- `package.json`'s `repository.url` must exactly (case-sensitive) match the GitHub repo the
+  trusted-publishing workflow runs from, or the OIDC exchange fails at publish time (fails
+  silently until you actually try — npm does not validate the config when you save it).
+- Provenance attestations are generated automatically for trusted-publishing releases from a
+  public repo/package — no `--provenance` flag needed, and it's *not* available for private
+  repos even if the package itself is public.
+- After confirming trusted publishing works, npm recommends locking the package's "Publishing
+  access" to "Require two-factor authentication and disallow tokens" to fully retire
+  token-based publish access.
+- `npm pack --dry-run` is a safe, no-auth way to double check the exact tarball contents (files,
+  size) before ever running a real `npm publish`.
+- Don't push the very first release's `vX.Y.Z` tag before the manual first publish + trusted
+  publisher setup are done: the tag-triggered workflow would fire immediately and fail
+  (`ENEEDAUTH`) since OIDC trusted publishing isn't authorized yet for a package that doesn't
+  exist. Once the package exists and trusted publishing is configured, it's still fine (and
+  good practice) to tag that first version retroactively for git history — just make the
+  workflow tolerant of "version already published" (check `npm view <name>@<version>` and skip
+  instead of failing) so a re-triggered run on an already-published tag doesn't show as a
+  failed Action.
+

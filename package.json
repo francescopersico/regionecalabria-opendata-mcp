@@ -2,9 +2,23 @@
 	"name": "regionecalabria-opendata-mcp",
 	"version": "0.1.0",
 	"description": "Model Context Protocol (MCP) server for Regione Calabria open data.",
-	"private": true,
 	"type": "module",
 	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/francescopersico/regionecalabria-opendata-mcp.git"
+	},
+	"homepage": "https://github.com/francescopersico/regionecalabria-opendata-mcp#readme",
+	"bugs": {
+		"url": "https://github.com/francescopersico/regionecalabria-opendata-mcp/issues"
+	},
+	"keywords": [
+		"mcp",
+		"model-context-protocol",
+		"ckan",
+		"open-data",
+		"regione-calabria"
+	],
 	"engines": {
 		"node": ">=22"
 	},
@@ -26,7 +40,8 @@
 		"format": "biome format --write .",
 		"test": "vitest run",
 		"test:watch": "vitest",
-		"verify": "tsc --noEmit && biome check . && vitest run && tsc"
+		"verify": "tsc --noEmit && biome check . && vitest run && tsc",
+		"prepublishOnly": "pnpm run verify"
 	},
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.29.0",

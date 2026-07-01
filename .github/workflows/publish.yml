@@ -1,0 +1,57 @@
+name: Publish to npm
+
+# Triggered by pushing a version tag (e.g. `git tag v0.1.0 && git push origin v0.1.0`).
+# Publishes using npm trusted publishing (OIDC) - no NPM_TOKEN secret required.
+# Requires a one-time trusted publisher configuration on npmjs.com pointing at this
+# repo + this workflow filename (see README.md "Publishing" section).
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+
+      # Trusted publishing requires npm CLI >=11.5.1; ensure it regardless of
+      # whatever version ships with the runner's Node install.
+      - run: npm install -g npm@latest
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm run verify
+
+      # Skip cleanly (instead of failing) if this exact version is already on the
+      # registry - e.g. the very first release, whose tag is pushed *after* it was
+      # already published manually (trusted publishing must be configured on an
+      # existing package, so the first publish can't come from this workflow).
+      - name: Check whether this version is already published
+        id: version-check
+        run: |
+          name=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "already-published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "already-published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.version-check.outputs.already-published == 'true'
+        run: echo "::notice::$(node -p "require('./package.json').name")@$(node -p "require('./package.json').version") is already published; skipping."
+
+      - if: steps.version-check.outputs.already-published == 'false'
+        run: npm publish --access public

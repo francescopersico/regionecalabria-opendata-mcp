@@ -33,6 +33,30 @@ on dataset shape.
 
 ## Getting started
 
+### Run via `npx` (no local clone needed)
+
+Once published to the npm registry (see [Publishing](#publishing--releasing)), any MCP client can run the
+stdio server without installing anything up front:
+
+```bash
+npx regionecalabria-opendata-mcp
+```
+
+Example MCP client config using `npx`:
+
+```json
+{
+  "mcpServers": {
+    "regionecalabria-opendata-mcp": {
+      "command": "npx",
+      "args": ["-y", "regionecalabria-opendata-mcp"]
+    }
+  }
+}
+```
+
+### Run from source
+
 ```bash
 pnpm install
 pnpm run build
@@ -116,6 +140,37 @@ test/
 | `pnpm run test:watch` | Run Vitest in watch mode.                              |
 | `pnpm run verify`     | Typecheck + lint + test + build (local "definition of done" check). |
 
+## Publishing / releasing
+
+This package is published to the public npm registry as `regionecalabria-opendata-mcp`, so it can be
+run with `npx regionecalabria-opendata-mcp` by any MCP client without cloning this repo.
+
+Releases are published from [`.github/workflows/publish.yml`](./.github/workflows/publish.yml) via npm's
+[trusted publishing](https://docs.npmjs.com/trusted-publishers) (OIDC) — no `NPM_TOKEN` secret is stored
+in this repo, and provenance attestations are generated automatically.
+
+**One-time setup (already done / to do once by a maintainer with npm publish rights):**
+
+1. Optionally, tag the release commit locally now: `git tag v0.1.0` (don't push it yet — a local-only
+   tag doesn't trigger anything on GitHub Actions).
+2. First publish must be done manually (a package must exist on npm before a trusted publisher can be
+   configured for it): `npm login`, then `npm publish --access public` from a clean `pnpm install && pnpm run build`.
+3. On [npmjs.com](https://www.npmjs.com/) → this package → Settings → Trusted Publisher → GitHub Actions,
+   configure: organization `francescopersico`, repository `regionecalabria-opendata-mcp`, workflow filename
+   `publish.yml`, allowed action `npm publish`.
+4. Recommended: afterwards, under Settings → Publishing access, enable "Require two-factor authentication
+   and disallow tokens" so only the trusted GitHub Actions workflow (or a maintainer with 2FA) can publish.
+5. Push the tag whenever you're ready: `git push origin v0.1.0`. This still triggers the workflow, but
+   its "already published?" check (`npm view`, unauthenticated) detects the version is already on the
+   registry and skips publishing instead of failing — safe to push right after step 2, or only after
+   step 4, whichever you prefer.
+
+**Every subsequent release:**
+
+1. Bump `version` in `package.json` (follow [SemVer](https://semver.org/)).
+2. Commit, then tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+3. The `Publish to npm` GitHub Actions workflow runs `pnpm run verify` and publishes automatically.
+
 ## Definition of Done for this scaffold
 
 - [x] `pnpm run verify` passes (typecheck, lint, tests, build all green).
@@ -124,6 +179,11 @@ test/
 - [x] Both stdio and Streamable HTTP entrypoints start and respond correctly.
 - [x] DNS-rebinding protection is enabled on the HTTP transport.
 - [x] `.gitignore` excludes `node_modules/`, `build/`, and local env files.
+- [ ] `regionecalabria-opendata-mcp` is published on the npm registry and runnable via
+      `npx regionecalabria-opendata-mcp` (first publish is a manual, one-time step; see
+      [Publishing / releasing](#publishing--releasing)).
+- [x] A `publish.yml` GitHub Actions workflow exists to publish future releases via npm trusted
+      publishing (OIDC), triggered by pushing a `vX.Y.Z` tag.
 - [x] `package_*` tools call the real Regione Calabria CKAN API (base URL overridable via
       `CKAN_BASE_URL`) and surface CKAN/network errors as tool errors instead of throwing.
 - [x] Unit tests mock `fetch` for determinism; one live integration test confirms the real
