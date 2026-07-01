@@ -11,9 +11,15 @@ Exposes the following tools:
 | `package_list`   | Lists dataset names/identifiers from the [Regione Calabria open data portal](https://dati.regione.calabria.it/) (CKAN `package_list`). | `{ limit?: number, offset?: number }`      | `{ names: string[] }`                             |
 | `package_show`   | Returns the full metadata + resources of one dataset by id/name (CKAN `package_show`).           | `{ id: string }`                            | `{ dataset: object }` (raw CKAN dataset dict)       |
 | `package_search` | Full-text search over datasets (CKAN `package_search`); preferred over `package_list` for browsing/filtering. | `{ q?: string, rows?: number, start?: number, sort?: string }` | `{ count: number, results: object[] }` (raw CKAN dataset dicts) |
+| `datastore_search` | Queries the actual data rows inside a DataStore-enabled resource (CKAN `datastore_search`), not just dataset metadata. Requires a `resource_id` with `datastore_active: true`, found via `package_show`. | `{ resourceId: string, q?: string, filters?: object, fields?: string[], sort?: string, limit?: number, offset?: number }` | `{ total?: number, fields: object[], records: object[] }` |
 
 No other tools, resources, or prompts are registered. This is intentional scaffolding — new
 capabilities should be added deliberately in follow-up work.
+
+`datastore_search` only works against resources that have CKAN's DataStore extension enabled for
+them (`datastore_active: true` in `package_show`'s `resources` array); this portal has DataStore
+enabled and most CSV/XLSX resources are queryable this way. `limit` is capped at 1000 rows per
+call regardless of the value requested, to keep responses a reasonable size to return to a model.
 
 `package_show` and `package_search` return CKAN's dataset dictionaries as-is (loosely typed).
 This portal uses the Italian DCAT-AP_IT metadata profile, whose fields vary between datasets and
@@ -72,8 +78,8 @@ This repo includes a workspace [`.vscode/mcp.json`](./.vscode/mcp.json) that reg
 1. `pnpm run build` (re-run after any change to `src/`, since `mcp.json` runs the compiled output).
 2. Open the Chat view, and start the `regionecalabria-opendata-mcp` server from the MCP Servers UI
    (or run **MCP: List Servers** from the Command Palette) — confirm the trust prompt.
-3. Ask Copilot to use `get_version`, `package_list`, `package_show`, or `package_search`, e.g.
-   *"Use package_search to find Calabria open datasets about acque"*.
+3. Ask Copilot to use `get_version`, `package_list`, `package_show`, `package_search`, or
+   `datastore_search`, e.g. *"Use package_search to find Calabria open datasets about acque"*.
 
 ## Project structure
 
@@ -83,16 +89,18 @@ src/
   package-metadata.ts      # reads name/version from package.json
   ckan-client.ts           # shared CKAN Action API client (callCkanAction, getCkanBaseUrl)
   tools/
-    version-tool.ts        # the get_version tool
-    package-list-tool.ts   # the package_list tool
-    package-show-tool.ts   # the package_show tool
-    package-search-tool.ts # the package_search tool
+    version-tool.ts          # the get_version tool
+    package-list-tool.ts     # the package_list tool
+    package-show-tool.ts     # the package_show tool
+    package-search-tool.ts   # the package_search tool
+    datastore-search-tool.ts # the datastore_search tool
   stdio.ts                 # stdio transport entrypoint
   http.ts                  # Streamable HTTP transport entrypoint (stateless)
 test/
   version-tool.test.ts             # end-to-end test via an in-memory client/server pair
   ckan-client.test.ts              # unit tests for the CKAN client (mocked fetch)
   package-tools.test.ts            # end-to-end tool tests (mocked fetch)
+  datastore-search-tool.test.ts    # end-to-end datastore_search tool tests (mocked fetch)
   package-show.integration.test.ts # live network sanity check against the real portal
 ```
 
@@ -111,8 +119,8 @@ test/
 ## Definition of Done for this scaffold
 
 - [x] `pnpm run verify` passes (typecheck, lint, tests, build all green).
-- [x] `get_version`, `package_list`, `package_show`, `package_search` are the only tools
-      registered; no other tools/resources/prompts exist.
+- [x] `get_version`, `package_list`, `package_show`, `package_search`, `datastore_search` are the
+      only tools registered; no other tools/resources/prompts exist.
 - [x] Both stdio and Streamable HTTP entrypoints start and respond correctly.
 - [x] DNS-rebinding protection is enabled on the HTTP transport.
 - [x] `.gitignore` excludes `node_modules/`, `build/`, and local env files.

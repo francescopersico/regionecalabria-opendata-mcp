@@ -79,6 +79,20 @@ repository. Read it at the start of every session before making changes.
   `{ success: boolean, result?: T, error?: { message, __type }, help }`; check `success`
   (not just HTTP status) before trusting `result`, since CKAN can return HTTP 200 with
   `success: false` for some error classes.
+- The DataStore extension (`datastore_search`, `datastore_search_sql`) is **enabled** on this
+  portal — verified live: many resources have `datastore_active: true` in `package_show`, and
+  both `GET .../datastore_search?resource_id=...` and `GET .../datastore_search_sql?sql=...`
+  return real data (confirmed against resource id `41e4af40-acb2-4f64-8acd-ade356df03d8`, a
+  "persone giuridiche" CSV). This lets tools query actual row-level data, not just dataset
+  metadata. `_table_metadata` (via `datastore_search`) lists all DataStore-backed resources.
+- CKAN Action API functions outside `ckan.logic.action.get` (e.g. `datastore_search`, which
+  lives in `ckanext.datastore.logic.action`) are still GET-able the same way: simple params as
+  plain query-string values, complex params (objects/arrays, e.g. `filters`, `fields`) as a
+  JSON-stringified (or comma-separated, for `fields`) query-string value.
+- `datastore_search_sql` requires the `ckan.datastore.sqlsearch.enabled` config option and CKAN
+  validates the query is a single `SELECT` server-side; decided (with user) not to expose it as
+  an MCP tool for now to avoid an unnecessary SQL-shaped surface, keeping only `datastore_search`
+  (structured filters/full-text) for querying resource data.
 
 ## Zod v4 / testing notes
 
