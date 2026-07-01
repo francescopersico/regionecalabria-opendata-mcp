@@ -1,5 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getPackageMetadata } from "./package-metadata.js";
+import { registerPackageListTool } from "./tools/package-list-tool.js";
+import { registerPackageSearchTool } from "./tools/package-search-tool.js";
+import { registerPackageShowTool } from "./tools/package-show-tool.js";
 import { registerVersionTool } from "./tools/version-tool.js";
 
 /**
@@ -15,6 +18,9 @@ export function createServer(): McpServer {
 	const server = new McpServer({ name, version });
 
 	registerVersionTool(server);
+	registerPackageListTool(server);
+	registerPackageShowTool(server);
+	registerPackageSearchTool(server);
 
 	return server;
 }

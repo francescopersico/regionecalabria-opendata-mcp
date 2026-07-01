@@ -60,3 +60,35 @@ repository. Read it at the start of every session before making changes.
   research before scaffolding, latest verified tool/library versions (checked via `npm view`,
   not assumed), an explicit interview via the questions tool before writing code, a defined
   Definition of Done, and a detailed final report.
+- `vscode_askQuestions` messages have a hard 200-character limit; if an explanation is longer,
+  ask a short question first and use a follow-up question to give the detailed option
+  breakdown once the user asks for it.
+
+## Regione Calabria open data portal (dati.regione.calabria.it)
+
+- It's a CKAN 2.9.5 instance (with the `dcatapit_*` extensions for the Italian DCAT-AP_IT
+  metadata profile) reachable at `https://dati.regione.calabria.it/opendata/api/3/action/`.
+  The public "Sviluppatori" page (`/624-2/`) documents this base URL and gives working example
+  calls for `package_list` and `package_show`.
+- CKAN dataset dicts from this portal are irregular: several DCAT-AP_IT fields (`theme`,
+  `creator`, `conforms_to`, `alternate_identifier`, ...) are stringified JSON arrays/objects
+  rather than native JSON, and the field set can differ between datasets. Prefer a loose/
+  passthrough zod schema (`z.record(z.string(), z.unknown())`) over a strict per-field schema
+  for `package_show`/`package_search` results.
+- CKAN Action API responses always have the shape
+  `{ success: boolean, result?: T, error?: { message, __type }, help }`; check `success`
+  (not just HTTP status) before trusting `result`, since CKAN can return HTTP 200 with
+  `success: false` for some error classes.
+
+## Zod v4 / testing notes
+
+- Zod v4's `z.record()` requires two args, `z.record(keySchema, valueSchema)` (e.g.
+  `z.record(z.string(), z.unknown())`); the old Zod v3 single-arg form
+  (`z.record(valueSchema)`, implicit string keys) throws/misbehaves.
+- Node 22's built-in global `fetch` + `AbortSignal.timeout(ms)` is sufficient for simple
+  outbound HTTP calls in an MCP server; no need for `node-fetch`/`axios`/`undici` as a direct
+  dependency.
+- To unit-test code that calls global `fetch`, use `vi.stubGlobal("fetch", vi.fn())` in
+  `beforeEach` and `vi.unstubAllGlobals()` in `afterEach`, resolving the mock with a real
+  `new Response(JSON.stringify(body), { status, headers })` so `.json()`/`.ok` behave exactly
+  like a real fetch response.
