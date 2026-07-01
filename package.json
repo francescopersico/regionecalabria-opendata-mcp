@@ -1,0 +1,44 @@
+{
+	"name": "regionecalabria-opendata-mcp",
+	"version": "0.1.0",
+	"description": "Model Context Protocol (MCP) server for Regione Calabria open data.",
+	"private": true,
+	"type": "module",
+	"license": "MIT",
+	"engines": {
+		"node": ">=22"
+	},
+	"bin": {
+		"regionecalabria-opendata-mcp": "./build/stdio.js"
+	},
+	"files": [
+		"build"
+	],
+	"scripts": {
+		"build": "tsc",
+		"start": "node build/stdio.js",
+		"start:http": "node build/http.js",
+		"dev": "tsx watch src/stdio.ts",
+		"dev:http": "tsx watch src/http.ts",
+		"typecheck": "tsc --noEmit",
+		"lint": "biome check .",
+		"lint:fix": "biome check --write .",
+		"format": "biome format --write .",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"verify": "tsc --noEmit && biome check . && vitest run && tsc"
+	},
+	"dependencies": {
+		"@modelcontextprotocol/sdk": "^1.29.0",
+		"express": "^5.2.1",
+		"zod": "^4.4.3"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.5.2",
+		"@types/express": "^5.0.6",
+		"@types/node": "^22.20.0",
+		"tsx": "^4.22.4",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.9"
+	}
+}
