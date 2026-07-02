@@ -12,9 +12,17 @@ Exposes the following tools:
 | `package_show`   | Returns the full metadata + resources of one dataset by id/name (CKAN `package_show`).           | `{ id: string }`                            | `{ dataset: object }` (raw CKAN dataset dict)       |
 | `package_search` | Full-text search over datasets (CKAN `package_search`); preferred over `package_list` for browsing/filtering. | `{ q?: string, rows?: number, start?: number, sort?: string }` | `{ count: number, results: object[] }` (raw CKAN dataset dicts) |
 | `datastore_search` | Queries the actual data rows inside a DataStore-enabled resource (CKAN `datastore_search`), not just dataset metadata. Requires a `resource_id` with `datastore_active: true`, found via `package_show`. | `{ resourceId: string, q?: string, filters?: object, fields?: string[], sort?: string, limit?: number, offset?: number }` | `{ total?: number, fields: object[], records: object[] }` |
+| `group_list`     | Lists the thematic categories ("temi", CKAN groups, e.g. Agricoltura, Ambiente, Economia) used to classify datasets on the portal, each with its dataset count (CKAN `group_list`). | none | `{ groups: { name: string, title: string, description: string, packageCount: number }[] }` |
+| `group_show`     | Shows one theme's details plus a lightweight list (id/name/title) of the datasets in it (CKAN `group_show`); reshaped, not a raw passthrough, to avoid a heavy nested payload and to omit user/account data. | `{ id: string }` | `{ name: string, title: string, description: string, packageCount: number, datasets: { id: string, name: string, title: string }[] }` |
 
 No other tools, resources, or prompts are registered. This is intentional scaffolding — new
 capabilities should be added deliberately in follow-up work.
+
+This portal has only a single CKAN organization (`regione-calabria`), so an `organization_list`/
+`organization_show` tool would add no browsing value (confirmed live: `organization_list` returns
+a 1-element list, and `organization_list?all_fields=true` currently errors with HTTP 500 on this
+portal). The 17 CKAN "groups" (themes/"temi", e.g. Agricoltura, Ambiente, Economia) are the
+real, well-populated categorization axis on this portal, hence `group_list`/`group_show` instead.
 
 `datastore_search` only works against resources that have CKAN's DataStore extension enabled for
 them (`datastore_active: true` in `package_show`'s `resources` array); this portal has DataStore
@@ -102,8 +110,9 @@ This repo includes a workspace [`.vscode/mcp.json`](./.vscode/mcp.json) that reg
 1. `pnpm run build` (re-run after any change to `src/`, since `mcp.json` runs the compiled output).
 2. Open the Chat view, and start the `regionecalabria-opendata-mcp` server from the MCP Servers UI
    (or run **MCP: List Servers** from the Command Palette) — confirm the trust prompt.
-3. Ask Copilot to use `get_version`, `package_list`, `package_show`, `package_search`, or
-   `datastore_search`, e.g. *"Use package_search to find Calabria open datasets about acque"*.
+3. Ask Copilot to use `get_version`, `package_list`, `package_show`, `package_search`,
+   `datastore_search`, `group_list`, or `group_show`, e.g. *"Use package_search to find Calabria
+   open datasets about acque"*.
 
 ## Project structure
 
@@ -118,6 +127,8 @@ src/
     package-show-tool.ts     # the package_show tool
     package-search-tool.ts   # the package_search tool
     datastore-search-tool.ts # the datastore_search tool
+    group-list-tool.ts       # the group_list tool
+    group-show-tool.ts       # the group_show tool
   stdio.ts                 # stdio transport entrypoint
   http.ts                  # Streamable HTTP transport entrypoint (stateless)
 test/
@@ -125,6 +136,7 @@ test/
   ckan-client.test.ts              # unit tests for the CKAN client (mocked fetch)
   package-tools.test.ts            # end-to-end tool tests (mocked fetch)
   datastore-search-tool.test.ts    # end-to-end datastore_search tool tests (mocked fetch)
+  group-tools.test.ts              # end-to-end group_list/group_show tool tests (mocked fetch)
   package-show.integration.test.ts # live network sanity check against the real portal
 ```
 
@@ -174,8 +186,9 @@ in this repo, and provenance attestations are generated automatically.
 ## Definition of Done for this scaffold
 
 - [x] `pnpm run verify` passes (typecheck, lint, tests, build all green).
-- [x] `get_version`, `package_list`, `package_show`, `package_search`, `datastore_search` are the
-      only tools registered; no other tools/resources/prompts exist.
+- [x] `get_version`, `package_list`, `package_show`, `package_search`, `datastore_search`,
+      `group_list`, `group_show` are the only tools registered; no other tools/resources/prompts
+      exist.
 - [x] Both stdio and Streamable HTTP entrypoints start and respond correctly.
 - [x] DNS-rebinding protection is enabled on the HTTP transport.
 - [x] `.gitignore` excludes `node_modules/`, `build/`, and local env files.

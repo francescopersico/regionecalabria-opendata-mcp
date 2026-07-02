@@ -93,6 +93,65 @@ repository. Read it at the start of every session before making changes.
   validates the query is a single `SELECT` server-side; decided (with user) not to expose it as
   an MCP tool for now to avoid an unnecessary SQL-shaped surface, keeping only `datastore_search`
   (structured filters/full-text) for querying resource data.
+- This portal has only **one** CKAN organization (`regione-calabria`) — verified live via
+  `organization_list`. `organization_list?all_fields=true` currently returns an HTTP 500 on this
+  portal (works fine on other CKAN instances/on `group_list`). Conclusion: don't add
+  `organization_list`/`organization_show` tools here, they'd add zero browsing value.
+- In contrast, this portal has 17 well-populated CKAN "groups" used as thematic categories
+  ("temi": Agricoltura, Ambiente, Cultura, Economia, ecc.), each with meaningful `package_count`
+  (verified live via `group_list?all_fields=true`) — this is the real, useful categorization axis
+  on this portal. Added `group_list` (list themes + counts) and `group_show` (one theme's details
+  + a lightweight `{id, name, title}` list of its datasets) tools for this reason.
+- `group_show?include_datasets=true` returns full, deeply-nested dataset dictionaries per package
+  (redundant with `package_show`) plus the group's member/user list by default. Always reshape the
+  response rather than passing it through raw, and pass `include_users=false`,
+  `include_followers=false`, `include_extras=false`, `include_groups=false` explicitly to avoid
+  fetching/exposing account data the tool doesn't need (data minimization).
+- Before adding any new "browse by X" tool to a CKAN-backed MCP server, query the live portal's
+  `X_list?all_fields=true` action first to check it's actually populated/meaningful for that
+  specific instance — CKAN's generic API surface (organizations, groups, tags, licenses) is not
+  equally useful on every deployment.
+
+## Standalone HTML reports (reports/ folder)
+
+- Pattern established by `reports/incidenti-stradali-dashboard.html` and followed for
+  `reports/alberi-monumentali-dashboard.html`: a single self-contained HTML file, zero
+  build step, libraries loaded from `cdn.jsdelivr.net` pinned to an exact version (checked
+  via `npm view <pkg> version` before writing the `<script>`/`<link>` tag, even though the
+  report itself has no npm dependency), and the dataset embedded as a static JS/JSON
+  snapshot directly in the file (works offline, avoids CORS/live-availability concerns for
+  a point-in-time report). Reuses the same visual language: light theme, card style
+  (`border-radius:14px`, subtle box-shadow), `-apple-system/Segoe UI` font stack, accent
+  `#3457d5`, muted text `#58607a`.
+- For a map + table report over the same dataset (e.g. "alberi monumentali"): Leaflet
+  1.9.4 + OpenStreetMap standard tiles (no API key) + Leaflet.markercluster 1.5.3 is a
+  good default when the user has no strong preference — confirmed via the interview
+  process, all defaults were accepted. Link the two views: clicking a table row calls
+  `markerClusterGroup.zoomToShowLayer()` + opens the marker popup + scrolls/highlights the
+  row; filtering (search/select) re-renders the table AND calls
+  `clusterGroup.clearLayers()` + `addLayers()` with only the filtered markers.
+- Dataset "Alberi monumentali" on the Regione Calabria portal: package name
+  `alberi-monumentali` (id `90c1ea0f-e896-4f39-aca8-e1abd4e05697`), single CSV resource
+  "Alberi monumentali.csv" (id `84de64fb-0d61-4c17-bb00-5f00840dba3b`), `datastore_active:
+  true`, 119 records. Coordinates are duplicated in two forms: `Lat`/`Long` as
+  degrees-minutes-seconds text, and `lat2`/`long2` as decimal strings using an
+  **Italian comma decimal separator** (e.g. `"39,07335278"`) — always
+  `parseFloat(str.replace(",", "."))` before using them as numbers/coordinates; prefer
+  `lat2`/`long2` over parsing the DMS strings.
+- Known data-quality quirks in that CSV worth normalizing at render time (not worth fixing
+  at the source): the `CRITERI DI MONUMENTALITA` and `CONTESTO URBANO` columns contain a
+  mojibake artifact `eta`` ` in place of `età` (encoding issue in the original file,
+  cosmetic replace with `.replace(/eta\`/g, "età")` is safe); `CONTESTO URBANO` values are
+  inconsistently `"no"`, `"sì"`, or `` "si`" `` (same mojibake) — normalize by testing
+  `/^s/i` on the trimmed value rather than exact string match. Also two near-duplicate
+  species labels exist verbatim in the data ("Eucalipto rostrato" vs "Eucalitto rostrato")
+  — a genuine upstream typo, left as-is rather than silently merged, since altering
+  published values without flagging it would misrepresent the source.
+- CKAN dataset page URLs on this portal follow the standard CKAN pattern
+  `https://dati.regione.calabria.it/opendata/dataset/<package-name>` even though the
+  `package_show` result's own `url` field is empty and its resource `url` values point at
+  an internal-only host (`http://10.2.174.5:5000/...`) — link to the public dataset page
+  by pattern, never to the internal resource URL.
 
 ## Zod v4 / testing notes
 

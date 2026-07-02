@@ -1,6 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getPackageMetadata } from "./package-metadata.js";
 import { registerDatastoreSearchTool } from "./tools/datastore-search-tool.js";
+import { registerGroupListTool } from "./tools/group-list-tool.js";
+import { registerGroupShowTool } from "./tools/group-show-tool.js";
 import { registerPackageListTool } from "./tools/package-list-tool.js";
 import { registerPackageSearchTool } from "./tools/package-search-tool.js";
 import { registerPackageShowTool } from "./tools/package-show-tool.js";
@@ -23,6 +25,8 @@ export function createServer(): McpServer {
 	registerPackageShowTool(server);
 	registerPackageSearchTool(server);
 	registerDatastoreSearchTool(server);
+	registerGroupListTool(server);
+	registerGroupShowTool(server);
 
 	return server;
 }
