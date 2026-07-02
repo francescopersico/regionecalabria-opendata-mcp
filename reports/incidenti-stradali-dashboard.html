@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<title>Incidenti stradali in Calabria (2016-2022) — Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    margin: 0; padding: 24px 32px 60px;
+    background: #f7f8fb; color: #1c2333;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  p.subtitle { margin: 0 0 24px; color: #58607a; font-size: 14px; }
+  .grid {
+    display: grid;
+    grid-template-columns: 560px 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+  .card {
+    background: #fff; border-radius: 14px; padding: 18px 20px;
+    box-shadow: 0 1px 3px rgba(20,25,50,0.08), 0 1px 2px rgba(20,25,50,0.06);
+  }
+  .card h2 { font-size: 15px; margin: 0 0 4px; }
+  .card p.hint { margin: 0 0 12px; font-size: 12px; color: #7a8199; }
+  #sunburst-wrap { position: relative; }
+  #detail-panel {
+    min-height: 160px; display: flex; flex-direction: column; gap: 10px;
+  }
+  #detail-title { font-size: 16px; font-weight: 600; }
+  #detail-sub { font-size: 12px; color: #7a8199; }
+  #detail-stats { font-size: 13px; line-height: 1.6; }
+  .pill {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    font-size: 11px; font-weight: 600; margin-left: 6px;
+  }
+  .pill.up { background: #fde2e1; color: #b3261e; }
+  .pill.down { background: #dcf3e4; color: #1c7a3f; }
+  .tooltip {
+    position: absolute; pointer-events: none; background: #1c2333; color: #fff;
+    padding: 8px 10px; border-radius: 8px; font-size: 12px; line-height: 1.5;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.2); opacity: 0; transition: opacity .1s;
+    max-width: 240px; z-index: 10;
+  }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 24px; }
+  .bar-label { font-size: 12px; fill: #1c2333; }
+  .bar-value { font-size: 11px; fill: #58607a; }
+  .axis text { font-size: 11px; fill: #58607a; }
+  .axis path, .axis line { stroke: #d8dcea; }
+  .legend { display: flex; align-items: center; gap: 14px; font-size: 11px; color: #58607a; margin-top: 8px; }
+  .legend span.swatch { display:inline-block; width:12px; height:12px; border-radius:3px; margin-right:4px; vertical-align:middle; }
+  #covid-note { fill: #b3261e; font-size: 11px; }
+</style>
+</head>
+<body>
+  <h1>Incidenti stradali in Calabria &mdash; 2016&ndash;2022</h1>
+  <p class="subtitle">Fonte: dataset "Incidenti stradali", Regione Calabria Open Data (373 comuni, 19.069 incidenti totali). Sunburst zoomabile Regione &rarr; Provincia &rarr; Comune, colorato per variazione % 2016&rarr;2022.</p>
+
+  <div class="grid">
+    <div class="card" id="sunburst-wrap">
+      <h2>Distribuzione gerarchica incidenti</h2>
+      <p class="hint">Clicca un settore per zoomare / selezionare; clicca il centro per risalire.</p>
+      <div id="sunburst"></div>
+      <div class="legend">
+        <div><span class="swatch" style="background:#1c7a3f"></span>in calo 2016&rarr;2022</div>
+        <div><span class="swatch" style="background:#c9ccd6"></span>stabile</div>
+        <div><span class="swatch" style="background:#b3261e"></span>in aumento 2016&rarr;2022</div>
+      </div>
+    </div>
+
+    <div class="card" id="detail-panel">
+      <h2>Dettaglio selezione</h2>
+      <div id="detail-title">Calabria (intera regione)</div>
+      <div id="detail-sub">19.069 incidenti totali, 2016&ndash;2022</div>
+      <div id="detail-stats"></div>
+      <div id="sparkline"></div>
+    </div>
+  </div>
+
+  <div class="row2">
+    <div class="card">
+      <h2>Andamento regionale per anno</h2>
+      <p class="hint">Somma di tutti i comuni; nota il calo nel 2020.</p>
+      <div id="trend-chart"></div>
+    </div>
+    <div class="card">
+      <h2>Top 15 comuni per totale incidenti</h2>
+      <p class="hint">2016&ndash;2022, valore assoluto.</p>
+      <div id="bar-chart"></div>
+    </div>
+  </div>
+
+  <div class="tooltip" id="tooltip"></div>
+
+<script>
+const DATA = {"years": [2016, 2017, 2018, 2019, 2020, 2021, 2022], "hierarchy": {"name": "Calabria", "pct": 0, "children": [{"name": "CS", "pct": -0.13, "children": [{"name": "Corigliano-Rossano", "value": 962, "values": [141, 143, 133, 161, 130, 120, 134], "pct": -0.05}, {"name": "Cosenza", "value": 939, "values": [161, 165, 168, 127, 94, 111, 113], "pct": -0.298}, {"name": "Rende", "value": 674, "values": [98, 101, 110, 111, 62, 86, 106], "pct": 0.082}, {"name": "Castrovillari", "value": 244, "values": [41, 49, 50, 36, 27, 21, 20], "pct": -0.512}, {"name": "Cassano all'Ionio", "value": 216, "values": [44, 31, 30, 42, 14, 22, 33], "pct": -0.25}, {"name": "Scalea", "value": 213, "values": [38, 26, 24, 31, 28, 26, 40], "pct": 0.053}, {"name": "Paola", "value": 204, "values": [30, 38, 38, 25, 19, 28, 26], "pct": -0.133}, {"name": "Montalto Uffugo", "value": 197, "values": [26, 28, 43, 26, 24, 27, 23], "pct": -0.115}, {"name": "Amantea", "value": 195, "values": [25, 33, 42, 23, 23, 29, 20], "pct": -0.2}, {"name": "Diamante", "value": 81, "values": [18, 6, 12, 15, 10, 9, 11], "pct": -0.389}, {"name": "Villapiana", "value": 80, "values": [16, 6, 13, 17, 7, 8, 13], "pct": -0.188}, {"name": "Belvedere Marittimo", "value": 79, "values": [13, 8, 15, 18, 8, 8, 9], "pct": -0.308}, {"name": "San Lucido", "value": 74, "values": [9, 8, 15, 12, 12, 10, 8], "pct": -0.111}, {"name": "San Marco Argentano", "value": 74, "values": [13, 10, 6, 9, 11, 15, 10], "pct": -0.231}, {"name": "Crosia", "value": 71, "values": [14, 19, 10, 7, 6, 11, 4], "pct": -0.714}, {"name": "Acri", "value": 68, "values": [12, 13, 10, 9, 6, 5, 13], "pct": 0.083}, {"name": "Bisignano", "value": 65, "values": [5, 8, 12, 7, 4, 18, 11], "pct": 1.2}, {"name": "Dipignano", "value": 64, "values": [8, 12, 15, 12, 5, 7, 5], "pct": -0.375}, {"name": "Fuscaldo", "value": 62, "values": [11, 10, 12, 6, 3, 11, 9], "pct": -0.182}, {"name": "San Giovanni in Fiore", "value": 61, "values": [8, 8, 11, 8, 6, 9, 11], "pct": 0.375}, {"name": "Morano Calabro", "value": 60, "values": [8, 9, 13, 7, 9, 5, 9], "pct": 0.125}, {"name": "Tarsia", "value": 59, "values": [14, 8, 9, 3, 6, 11, 8], "pct": -0.429}, {"name": "Cetraro", "value": 50, "values": [8, 8, 12, 6, 4, 8, 4], "pct": -0.5}, {"name": "Trebisacce", "value": 49, "values": [9, 5, 8, 7, 4, 7, 9], "pct": 0.0}, {"name": "Praia a Mare", "value": 48, "values": [5, 7, 10, 7, 6, 5, 8], "pct": 0.6}, {"name": "Altomonte", "value": 46, "values": [7, 3, 4, 11, 9, 9, 3], "pct": -0.571}, {"name": "Castrolibero", "value": 38, "values": [2, 10, 3, 4, 4, 8, 7], "pct": 2.5}, {"name": "San Fili", "value": 38, "values": [4, 5, 5, 3, 4, 10, 7], "pct": 0.75}, {"name": "Luzzi", "value": 37, "values": [1, 8, 3, 3, 4, 12, 6], "pct": 5.0}, {"name": "Bonifati", "value": 33, "values": [7, 9, 2, 8, 0, 3, 4], "pct": -0.429}, {"name": "Roggiano Gravina", "value": 33, "values": [3, 7, 2, 7, 5, 4, 5], "pct": 0.667}, {"name": "Lattarico", "value": 32, "values": [5, 3, 4, 4, 1, 7, 8], "pct": 0.6}, {"name": "Mangone", "value": 32, "values": [5, 3, 5, 5, 4, 4, 6], "pct": 0.2}, {"name": "Santa Maria del Cedro", "value": 32, "values": [6, 7, 4, 5, 4, 3, 3], "pct": -0.5}, {"name": "San Nicola Arcella", "value": 31, "values": [4, 8, 4, 2, 1, 6, 6], "pct": 0.5}, {"name": "Mormanno", "value": 28, "values": [9, 1, 4, 2, 4, 3, 5], "pct": -0.444}, {"name": "Rocca Imperiale", "value": 28, "values": [2, 6, 4, 4, 5, 4, 3], "pct": 0.5}, {"name": "Tortora", "value": 28, "values": [2, 5, 3, 3, 3, 7, 5], "pct": 1.5}, {"name": "Santo Stefano di Rogliano", "value": 27, "values": [3, 3, 7, 4, 4, 5, 1], "pct": -0.667}, {"name": "Acquappesa", "value": 26, "values": [3, 3, 5, 6, 5, 2, 2], "pct": -0.333}, {"name": "Guardia Piemontese", "value": 26, "values": [0, 7, 8, 4, 2, 4, 1], "pct": 1.0}, {"name": "Laino Borgo", "value": 25, "values": [4, 4, 5, 4, 5, 2, 1], "pct": -0.75}, {"name": "San Pietro in Guarano", "value": 25, "values": [6, 3, 3, 1, 4, 4, 4], "pct": -0.333}, {"name": "Torano Castello", "value": 25, "values": [7, 4, 1, 4, 3, 4, 2], "pct": -0.714}, {"name": "Rose", "value": 24, "values": [4, 7, 1, 2, 3, 4, 3], "pct": -0.25}, {"name": "Amendolara", "value": 23, "values": [2, 5, 3, 4, 3, 3, 3], "pct": 0.5}, {"name": "Casali del Manco", "value": 23, "values": [4, 4, 6, 2, 1, 6, 0], "pct": -1.0}, {"name": "Rogliano", "value": 23, "values": [4, 3, 4, 5, 0, 5, 2], "pct": -0.5}, {"name": "Saracena", "value": 22, "values": [1, 3, 6, 3, 4, 1, 4], "pct": 3.0}, {"name": "Spezzano Albanese", "value": 22, "values": [7, 4, 2, 3, 0, 4, 2], "pct": -0.714}, {"name": "Altilia", "value": 21, "values": [3, 7, 3, 4, 1, 2, 1], "pct": -0.667}, {"name": "Grisolia", "value": 21, "values": [5, 2, 3, 4, 3, 2, 2], "pct": -0.6}, {"name": "Mendicino", "value": 20, "values": [1, 5, 2, 1, 2, 4, 5], "pct": 4.0}, {"name": "Cerchiara di Calabria", "value": 18, "values": [4, 0, 7, 1, 1, 3, 2], "pct": -0.5}, {"name": "San Demetrio Corone", "value": 18, "values": [3, 1, 3, 4, 3, 2, 2], "pct": -0.333}, {"name": "Spezzano della Sila", "value": 18, "values": [2, 3, 3, 3, 3, 1, 3], "pct": 0.5}, {"name": "Zumpano", "value": 18, "values": [2, 1, 6, 5, 1, 2, 1], "pct": -0.5}, {"name": "Calopezzati", "value": 17, "values": [2, 2, 4, 2, 1, 2, 4], "pct": 1.0}, {"name": "Celico", "value": 16, "values": [3, 4, 2, 4, 1, 0, 2], "pct": -0.333}, {"name": "Terranova da Sibari", "value": 16, "values": [3, 3, 1, 2, 5, 2, 0], "pct": -1.0}, {"name": "Fiumefreddo Bruzio", "value": 15, "values": [3, 5, 0, 1, 1, 3, 2], "pct": -0.333}, {"name": "Francavilla Marittima", "value": 15, "values": [2, 4, 0, 0, 1, 1, 7], "pct": 2.5}, {"name": "Longobardi", "value": 15, "values": [0, 4, 1, 0, 3, 4, 3], "pct": 1.0}, {"name": "Figline Vegliaturo", "value": 14, "values": [2, 1, 1, 1, 3, 3, 3], "pct": 0.5}, {"name": "Rovito", "value": 14, "values": [3, 1, 3, 2, 1, 3, 1], "pct": -0.667}, {"name": "Belsito", "value": 13, "values": [4, 2, 2, 2, 1, 1, 1], "pct": -0.75}, {"name": "Cariati", "value": 13, "values": [2, 2, 1, 2, 0, 3, 3], "pct": 0.5}, {"name": "Fagnano Castello", "value": 13, "values": [1, 3, 0, 0, 5, 1, 3], "pct": 2.0}, {"name": "Sangineto", "value": 13, "values": [3, 1, 2, 1, 1, 2, 3], "pct": 0.0}, {"name": "Belmonte Calabro", "value": 12, "values": [1, 4, 1, 3, 2, 1, 0], "pct": -1.0}, {"name": "Castiglione Cosentino", "value": 12, "values": [2, 1, 2, 3, 2, 2, 0], "pct": -1.0}, {"name": "San Giorgio Albanese", "value": 12, "values": [0, 5, 1, 2, 1, 2, 1], "pct": 1.0}, {"name": "Aprigliano", "value": 11, "values": [1, 1, 2, 1, 2, 2, 2], "pct": 1.0}, {"name": "Falconara Albanese", "value": 11, "values": [0, 3, 3, 1, 1, 2, 1], "pct": 1.0}, {"name": "Frascineto", "value": 11, "values": [4, 0, 4, 1, 0, 0, 2], "pct": -0.5}, {"name": "Cerisano", "value": 10, "values": [0, 2, 2, 4, 0, 1, 1], "pct": 1.0}, {"name": "Malvito", "value": 10, "values": [2, 2, 0, 2, 0, 2, 2], "pct": 0.0}, {"name": "Cleto", "value": 9, "values": [0, 2, 1, 1, 2, 1, 2], "pct": 1.0}, {"name": "Lago", "value": 9, "values": [0, 3, 0, 0, 2, 2, 2], "pct": 1.0}, {"name": "Mandatoriccio", "value": 9, "values": [2, 1, 0, 1, 2, 2, 1], "pct": -0.5}, {"name": "Montegiordano", "value": 9, "values": [2, 1, 0, 1, 2, 3, 0], "pct": -1.0}, {"name": "Oriolo", "value": 9, "values": [2, 0, 0, 0, 3, 3, 1], "pct": -0.5}, {"name": "Roseto Capo Spulico", "value": 9, "values": [3, 0, 2, 0, 1, 1, 2], "pct": -0.333}, {"name": "Marano Principato", "value": 8, "values": [3, 1, 1, 2, 0, 1, 0], "pct": -1.0}, {"name": "San Lorenzo del Vallo", "value": 8, "values": [1, 1, 1, 3, 1, 0, 1], "pct": 0.0}, {"name": "San Sosti", "value": 8, "values": [0, 0, 0, 1, 1, 3, 3], "pct": 1.0}, {"name": "San Vincenzo La Costa", "value": 7, "values": [0, 0, 1, 1, 2, 1, 2], "pct": 1.0}, {"name": "Santa Sofia d'Epiro", "value": 7, "values": [2, 1, 0, 1, 0, 2, 1], "pct": -0.5}, {"name": "Laino Castello", "value": 6, "values": [0, 0, 3, 0, 2, 1, 0], "pct": 0.0}, {"name": "Mongrassano", "value": 6, "values": [0, 0, 0, 4, 0, 2, 0], "pct": 0.0}, {"name": "Pietrapaola", "value": 6, "values": [1, 0, 0, 0, 3, 1, 1], "pct": 0.0}, {"name": "Carolei", "value": 5, "values": [0, 0, 3, 1, 0, 0, 1], "pct": 1.0}, {"name": "Colosimi", "value": 5, "values": [0, 0, 1, 1, 0, 1, 2], "pct": 1.0}, {"name": "Firmo", "value": 5, "values": [2, 0, 1, 0, 1, 0, 1], "pct": -0.5}, {"name": "Mottafollone", "value": 5, "values": [1, 0, 0, 2, 1, 1, 0], "pct": -1.0}, {"name": "Orsomarso", "value": 5, "values": [2, 0, 0, 0, 1, 0, 2], "pct": 0.0}, {"name": "Paterno Calabro", "value": 5, "values": [2, 0, 0, 0, 2, 1, 0], "pct": -1.0}, {"name": "Piane Crati", "value": 5, "values": [0, 1, 1, 2, 1, 0, 0], "pct": 0.0}, {"name": "Albidona", "value": 4, "values": [0, 2, 0, 0, 1, 0, 1], "pct": 1.0}, {"name": "Bianchi", "value": 4, "values": [0, 0, 1, 0, 1, 1, 1], "pct": 1.0}, {"name": "Bocchigliero", "value": 4, "values": [0, 0, 1, 1, 0, 1, 1], "pct": 1.0}, {"name": "Buonvicino", "value": 4, "values": [2, 1, 0, 1, 0, 0, 0], "pct": -1.0}, {"name": "Civita", "value": 4, "values": [1, 1, 1, 0, 1, 0, 0], "pct": -1.0}, {"name": "Grimaldi", "value": 4, "values": [1, 0, 1, 1, 1, 0, 0], "pct": -1.0}, {"name": "Lungro", "value": 4, "values": [0, 0, 0, 1, 1, 0, 2], "pct": 1.0}, {"name": "Marzi", "value": 4, "values": [1, 0, 1, 0, 1, 0, 1], "pct": 0.0}, {"name": "Pedivigliano", "value": 4, "values": [0, 0, 0, 0, 1, 2, 1], "pct": 1.0}, {"name": "Caloveto", "value": 3, "values": [1, 0, 0, 0, 1, 1, 0], "pct": -1.0}, {"name": "Cervicati", "value": 3, "values": [0, 0, 0, 1, 0, 2, 0], "pct": 0.0}, {"name": "Cerzeto", "value": 3, "values": [0, 0, 1, 0, 1, 0, 1], "pct": 1.0}, {"name": "Maier…", "value": 3, "values": [0, 0, 1, 0, 0, 0, 2], "pct": 1.0}, {"name": "Malito", "value": 3, "values": [1, 0, 1, 1, 0, 0, 0], "pct": -1.0}, {"name": "Marano Marchesato", "value": 3, "values": [0, 0, 2, 0, 0, 1, 0], "pct": 0.0}, {"name": "Santa Caterina Albanese", "value": 3, "values": [1, 0, 1, 0, 1, 0, 0], "pct": -1.0}, {"name": "Santa Domenica Talao", "value": 3, "values": [1, 1, 0, 0, 0, 0, 1], "pct": 0.0}, {"name": "Verbicaro", "value": 3, "values": [0, 0, 0, 2, 0, 1, 0], "pct": 0.0}, {"name": "Aiello Calabro", "value": 2, "values": [0, 1, 0, 0, 0, 0, 1], "pct": 1.0}, {"name": "Canna", "value": 2, "values": [0, 0, 1, 0, 0, 1, 0], "pct": 0.0}, {"name": "Castroregio", "value": 2, "values": [1, 0, 0, 0, 1, 0, 0], "pct": -1.0}, {"name": "Cellara", "value": 2, "values": [0, 0, 0, 1, 0, 1, 0], "pct": 0.0}, {"name": "Cropalati", "value": 2, "values": [0, 1, 0, 0, 0, 0, 1], "pct": 1.0}, {"name": "Lappano", "value": 2, "values": [0, 0, 0, 0, 0, 1, 1], "pct": 1.0}, {"name": "Longobucco", "value": 2, "values": [0, 0, 0, 1, 0, 1, 0], "pct": 0.0}, {"name": "Paludi", "value": 2, "values": [0, 0, 1, 1, 0, 0, 0], "pct": 0.0}, {"name": "San Basile", "value": 2, "values": [0, 0, 0, 0, 1, 0, 1], "pct": 1.0}, {"name": "San Donato di Ninea", "value": 2, "values": [0, 0, 0, 1, 0, 1, 0], "pct": 0.0}, {"name": "Scala Coeli", "value": 2, "values": [1, 1, 0, 0, 0, 0, 0], "pct": -1.0}, {"name": "Scigliano", "value": 2, "values": [0, 0, 0, 0, 1, 1, 0], "pct": 0.0}, {"name": "Campana", "value": 1, "values": [0, 1, 0, 0, 0, 0, 0], "pct": 0.0}, {"name": "Domanico", "value": 1, "values": [0, 0, 0, 0, 1, 0, 0], "pct": 0.0}, {"name": "Panettieri", "value": 1, "values": [0, 0, 0, 1, 0, 0, 0], "pct": 0.0}, {"name": "Papasidero", "value": 1, "values": [1, 0, 0, 0, 0, 0, 0], "pct": -1.0}, {"name": "Plataci", "value": 1, "values": [0, 0, 0, 0, 1, 0, 0], "pct": 0.0}, {"name": "Rota Greca", "value": 1, "values": [0, 0, 0, 0, 1, 0, 0], "pct": 0.0}, {"name": "San Cosmo Albanese", "value": 1, "values": [1, 0, 0, 0, 0, 0, 0], "pct": -1.0}, {"name": "Sant'Agata di Esaro", "value": 1, "values": [0, 0, 0, 0, 0, 0, 1], "pct": 1.0}]}, {"name": "CZ", "pct": -0.136, "children": [{"name": "Lamezia Terme", "value": 940, "values": [145, 149, 134, 146, 98, 131, 137], "pct": -0.055}, {"name": "Catanzaro", "value": 917, "values": [173, 155, 173, 119, 106, 138, 53], "pct": -0.694}, {"name": "Soverato", "value": 92, "values": [18, 15, 13, 11, 4, 9, 22], "pct": 0.222}, {"name": "Sellia Marina", "value": 73, "values": [8, 6, 13, 9, 6, 13, 18], "pct": 1.25}, {"name": "Borgia", "value": 65, "values": [6, 18, 8, 7, 7, 7, 12], "pct": 1.0}, {"name": "Gizzeria", "value": 60, "values": [11, 7, 11, 5, 2, 10, 14], "pct": 0.273}, {"name": "Montepaone", "value": 59, "values": [9, 8, 6, 4, 10, 7, 15], "pct": 0.667}, {"name": "Curinga", "value": 57, "values": [10, 7, 7, 8, 8, 13, 4], "pct": -0.6}, {"name": "Maida", "value": 57, "values": [10, 4, 15, 9, 5, 7, 7], "pct": -0.3}, {"name": "Falerna", "value": 53, "values": [8, 7, 12, 4, 5, 5, 12], "pct": 0.5}, {"name": "Nocera Terinese", "value": 51, "values": [4, 10, 10, 4, 5, 7, 11], "pct": 1.75}, {"name": "Cropani", "value": 49, "values": [6, 5, 11, 3, 5, 7, 12], "pct": 1.0}, {"name": "Feroleto Antico", "value": 49, "values": [9, 7, 5, 6, 4, 10, 8], "pct": -0.111}, {"name": "Simeri Crichi", "value": 49, "values": [9, 6, 5, 9, 5, 8, 7], "pct": -0.222}, {"name": "Squillace", "value": 45, "values": [9, 12, 2, 4, 4, 8, 6], "pct": -0.333}, {"name": "Satriano", "value": 44, "values": [8, 5, 7, 5, 4, 4, 11], "pct": 0.375}, {"name": "Stalett", "value": 43, "values": [10, 9, 5, 10, 3, 3, 3], "pct": -0.7}, {"name": "Botricello", "value": 42, "values": [7, 8, 6, 2, 7, 6, 6], "pct": -0.143}, {"name": "Marcellinara", "value": 32, "values": [4, 8, 9, 2, 1, 4, 4], "pct": 0.0}, {"name": "Davoli", "value": 30, "values": [3, 4, 3, 4, 1, 7, 8], "pct": 1.667}, {"name": "Girifalco", "value": 29, "values": [5, 1, 3, 4, 8, 6, 2], "pct": -0.6}, {"name": "Santa Caterina dello Ionio", "value": 29, "values": [5, 3, 3, 5, 2, 7, 4], "pct": -0.2}, {"name": "Montauro", "value": 28, "values": [3, 7, 3, 0, 4, 4, 7], "pct": 1.333}, {"name": "Sant'Andrea Apostolo dello Ionio", "value": 26, "values": [4, 4, 4, 1, 2, 3, 8], "pct": 1.0}, {"name": "Badolato", "value": 25, "values": [7, 3, 3, 4, 1, 3, 4], "pct": -0.429}, {"name": "Chiaravalle Centrale", "value": 23, "values": [5, 6, 0, 0, 1, 4, 7], "pct": 0.4}, {"name": "Settingiano", "value": 21, "values": [6, 3, 3, 3, 1, 2, 3], "pct": -0.5}, {"name": "San Pietro a Maida", "value": 20, "values": [4, 3, 2, 2, 0, 2, 7], "pct": 0.75}, {"name": "Tiriolo", "value": 20, "values": [3, 3, 5, 2, 0, 3, 4], "pct": 0.333}, {"name": "Pianopoli", "value": 19, "values": [5, 0, 1, 3, 3, 3, 4], "pct": -0.2}, {"name": "Soveria Mannelli", "value": 19, "values": [2, 2, 2, 5, 1, 6, 1], "pct": -0.5}, {"name": "Decollatura", "value": 17, "values": [4, 3, 1, 2, 2, 3, 2], "pct": -0.5}, {"name": "Guardavalle", "value": 17, "values": [3, 3, 3, 4, 0, 4, 0], "pct": -1.0}, {"name": "Cortale", "value": 16, "values": [2, 5, 1, 4, 0, 2, 2], "pct": 0.0}, {"name": "Sersale", "value": 16, "values": [3, 1, 2, 2, 4, 3, 1], "pct": -0.667}, {"name": "Belcastro", "value": 15, "values": [1, 2, 4, 1, 1, 3, 3], "pct": 2.0}, {"name": "San Mango d'Aquino", "value": 14, "values": [3, 5, 0, 2, 2, 1, 1], "pct": -0.667}, {"name": "Caraffa di Catanzaro", "value": 13, "values": [2, 3, 2, 1, 1, 1, 3], "pct": 0.5}, {"name": "Martirano", "value": 13, "values": [2, 3, 3, 3, 0, 1, 1], "pct": -0.5}, {"name": "San Sostene", "value": 13, "values": [1, 1, 3, 1, 1, 2, 4], "pct": 3.0}, {"name": "Isca sullo Ionio", "value": 12, "values": [0, 1, 3, 2, 2, 2, 2], "pct": 1.0}, {"name": "Platania", "value": 9, "values": [1, 1, 2, 0, 4, 0, 1], "pct": 0.0}, {"name": "Magisano", "value": 7, "values": [1, 0, 1, 1, 1, 1, 2], "pct": 1.0}, {"name": "San Pietro Apostolo", "value": 7, "values": [0, 2, 1, 0, 0, 2, 2], "pct": 1.0}, {"name": "Cardinale", "value": 6, "values": [1, 0, 0, 1, 0, 2, 2], "pct": 1.0}, {"name": "Carlopoli", "value": 6, "values": [2, 0, 0, 0, 0, 0, 4], "pct": 1.0}, {"name": "Martirano Lombardo", "value": 6, "values": [0, 1, 0, 0, 1, 2, 2], "pct": 1.0}, {"name": "Motta Santa Lucia", "value": 6, "values": [1, 1, 0, 3, 0, 1, 0], "pct": -1.0}, {"name": "Serrastretta", "value": 6, "values": [2, 0, 2, 1, 0, 1, 0], "pct": -1.0}, {"name": "Gagliato", "value": 5, "values": [0, 1, 2, 0, 0, 1, 1], "pct": 1.0}, {"name": "Gimigliano", "value": 5, "values": [0, 2, 1, 0, 1, 1, 0], "pct": 0.0}, {"name": "San Floro", "value": 5, "values": [0, 0, 0, 1, 2, 1, 1], "pct": 1.0}, {"name": "Torre di Ruggiero", "value": 5, "values": [0, 0, 0, 0, 1, 4, 0], "pct": 0.0}, {"name": "Amaroni", "value": 4, "values": [0, 1, 0, 1, 1, 0, 1], "pct": 1.0}, {"name": "Marcedusa", "value": 4, "values": [0, 0, 0, 1, 0, 1, 2], "pct": 1.0}, {"name": "Palermiti", "value": 4, "values": [0, 0, 0, 1, 1, 1, 1], "pct": 1.0}, {"name": "Pentone", "value": 4, "values": [0, 0, 1, 3, 0, 0, 0], "pct": 0.0}, {"name": "Petrizzi", "value": 4, "values": [0, 0, 2, 0, 0, 0, 2], "pct": 1.0}, {"name": "Petron…", "value": 4, "values": [0, 0, 1, 0, 1, 0, 2], "pct": 1.0}, {"name": "Sorbo San Basile", "value": 4, "values": [0, 0, 0, 1, 1, 0, 2], "pct": 1.0}, {"name": "Amato", "value": 3, "values": [0, 1, 1, 0, 1, 0, 0], "pct": 0.0}, {"name": "Cerva", "value": 3, "values": [0, 0, 1, 0, 1, 0, 1], "pct": 1.0}, {"name": "Gasperina", "value": 3, "values": [0, 0, 1, 0, 0, 1, 1], "pct": 1.0}, {"name": "San Vito sullo Ionio", "value": 3, "values": [0, 0, 0, 1, 0, 2, 0], "pct": 0.0}, {"name": "Soveria Simeri", "value": 3, "values": [0, 0, 0, 1, 1, 1, 0], "pct": 0.0}, {"name": "Andali", "value": 2, "values": [0, 0, 2, 0, 0, 0, 0], "pct": 0.0}, {"name": "Argusto", "value": 2, "values": [1, 0, 0, 0, 0, 0, 1], "pct": 0.0}, {"name": "Cenadi", "value": 2, "values": [0, 0, 1, 0, 0, 0, 1], "pct": 1.0}, {"name": "Fossato Serralta", "value": 2, "values": [0, 0, 0, 0, 0, 1, 1], "pct": 1.0}, {"name": "Jacurso", "value": 2, "values": [0, 0, 1, 1, 0, 0, 0], "pct": 0.0}, {"name": "Vallefiorita", "value": 2, "values": [0, 1, 0, 1, 0, 0, 0], "pct": 0.0}, {"name": "Albi", "value": 1, "values": [0, 0, 1, 0, 0, 0, 0], "pct": 0.0}, {"name": "Cicala", "value": 1, "values": [0, 0, 0, 0, 0, 0, 1], "pct": 1.0}, {"name": "Olivadi", "value": 1, "values": [0, 1, 0, 0, 0, 0, 0], "pct": 0.0}, {"name": "Taverna", "value": 1, "values": [0, 0, 0, 0, 0, 0, 1], "pct": 1.0}]}, {"name": "KR", "pct": -0.008, "children": [{"name": "Crotone", "value": 999, "values": [147, 145, 165, 145, 125, 140, 132], "pct": -0.102}, {"name": "Isola di Capo Rizzuto", "value": 145, "values": [26, 15, 15, 21, 20, 19, 29], "pct": 0.115}, {"name": "Cir• Marina", "value": 120, "values": [11, 16, 13, 22, 21, 19, 18], "pct": 0.636}, {"name": "Cutro", "value": 89, "values": [17, 7, 13, 16, 13, 14, 9], "pct": -0.471}, {"name": "Strongoli", "value": 87, "values": [9, 13, 10, 15, 12, 14, 14], "pct": 0.556}, {"name": "Rocca di Neto", "value": 39, "values": [7, 4, 4, 9, 3, 5, 7], "pct": 0.0}, {"name": "Petilia Policastro", "value": 33, "values": [2, 4, 5, 5, 7, 3, 7], "pct": 2.5}, {"name": "Caccuri", "value": 25, "values": [7, 8, 4, 1, 2, 2, 1], "pct": -0.857}, {"name": "Melissa", "value": 22, "values": [6, 0, 4, 6, 2, 1, 3], "pct": -0.5}, {"name": "Roccabernarda", "value": 20, "values": [1, 4, 2, 1, 2, 5, 5], "pct": 4.0}, {"name": "Santa Severina", "value": 20, "values": [4, 2, 3, 4, 3, 3, 1], "pct": -0.75}, {"name": "Crucoli", "value": 19, "values": [3, 1, 6, 3, 1, 2, 3], "pct": 0.0}, {"name": "Cir•", "value": 17, "values": [1, 3, 3, 2, 1, 3, 4], "pct": 3.0}, {"name": "Mesoraca", "value": 16, "values": [2, 1, 2, 2, 1, 4, 4], "pct": 1.0}, {"name": "Scandale", "value": 15, "values": [4, 0, 1, 0, 0, 6, 4], "pct": 0.0}, {"name": "Cerenzia", "value": 14, "values": [2, 0, 0, 4, 2, 3, 3], "pct": 0.5}, {"name": "Cotronei", "value": 14, "values": [1, 1, 3, 2, 6, 1, 0], "pct": -1.0}, {"name": "Belvedere di Spinello", "value": 13, "values": [1, 1, 3, 1, 3, 2, 2], "pct": 1.0}, {"name": "Casabona", "value": 12, "values": [2, 2, 4, 0, 0, 1, 3], "pct": 0.5}, {"name": "San Mauro Marchesato", "value": 7, "values": [0, 1, 0, 1, 0, 2, 3], "pct": 1.0}, {"name": "Carfizzi", "value": 3, "values": [0, 0, 1, 1, 1, 0, 0], "pct": 0.0}, {"name": "Castelsilano", "value": 2, "values": [0, 2, 0, 0, 0, 0, 0], "pct": 0.0}, {"name": "Pallagorio", "value": 2, "values": [0, 0, 1, 1, 0, 0, 0], "pct": 0.0}, {"name": "Umbriatico", "value": 2, "values": [1, 0, 0, 0, 0, 0, 1], "pct": 0.0}, {"name": "Verzino", "value": 1, "values": [1, 0, 0, 0, 0, 0, 0], "pct": -1.0}]}, {"name": "RC", "pct": -0.031, "children": [{"name": "Reggio di Calabria", "value": 2831, "values": [439, 438, 466, 440, 286, 369, 393], "pct": -0.105}, {"name": "Palmi", "value": 361, "values": [52, 61, 74, 44, 27, 55, 48], "pct": -0.077}, {"name": "Villa San Giovanni", "value": 258, "values": [36, 50, 28, 42, 26, 30, 46], "pct": 0.278}, {"name": "Siderno", "value": 245, "values": [43, 33, 25, 34, 23, 38, 49], "pct": 0.14}, {"name": "Locri", "value": 207, "values": [29, 42, 34, 24, 22, 31, 25], "pct": -0.138}, {"name": "Gioia Tauro", "value": 206, "values": [39, 28, 31, 23, 26, 35, 24], "pct": -0.385}, {"name": "Rosarno", "value": 186, "values": [20, 32, 31, 30, 18, 25, 30], "pct": 0.5}, {"name": "Taurianova", "value": 170, "values": [18, 30, 25, 29, 19, 23, 26], "pct": 0.444}, {"name": "Bovalino", "value": 155, "values": [24, 20, 24, 22, 14, 25, 26], "pct": 0.083}, {"name": "Melito di Porto Salvo", "value": 135, "values": [21, 32, 14, 16, 15, 20, 17], "pct": -0.19}, {"name": "Caulonia", "value": 92, "values": [21, 12, 16, 8, 10, 14, 11], "pct": -0.476}, {"name": "Marina di Gioiosa Ionica", "value": 88, "values": [12, 8, 9, 9, 14, 16, 20], "pct": 0.667}, {"name": "Cittanova", "value": 81, "values": [9, 15, 13, 11, 11, 9, 13], "pct": 0.444}, {"name": "Motta San Giovanni", "value": 75, "values": [11, 5, 12, 8, 16, 12, 11], "pct": 0.0}, {"name": "Polistena", "value": 75, "values": [10, 17, 17, 10, 6, 5, 10], "pct": 0.0}, {"name": "Bianco", "value": 74, "values": [17, 11, 12, 11, 8, 5, 10], "pct": -0.412}, {"name": "Scilla", "value": 67, "values": [6, 9, 8, 11, 10, 8, 15], "pct": 1.5}, {"name": "Roccella Ionica", "value": 66, "values": [13, 4, 9, 17, 6, 10, 7], "pct": -0.462}, {"name": "Ardore", "value": 65, "values": [12, 11, 7, 7, 10, 7, 11], "pct": -0.083}, {"name": "Bagnara Calabra", "value": 60, "values": [10, 14, 7, 8, 7, 8, 6], "pct": -0.4}, {"name": "Condofuri", "value": 58, "values": [8, 11, 6, 9, 8, 10, 6], "pct": -0.25}, {"name": "Bova Marina", "value": 50, "values": [5, 9, 6, 8, 6, 8, 8], "pct": 0.6}, {"name": "Montebello Ionico", "value": 49, "values": [9, 4, 5, 8, 6, 6, 11], "pct": 0.222}, {"name": "Rizziconi", "value": 48, "values": [4, 12, 8, 4, 6, 3, 11], "pct": 1.75}, {"name": "Cinquefrondi", "value": 40, "values": [6, 8, 2, 9, 7, 4, 4], "pct": -0.333}, {"name": "San Ferdinando", "value": 40, "values": [9, 5, 6, 4, 5, 4, 7], "pct": -0.222}, {"name": "Riace", "value": 36, "values": [8, 5, 4, 3, 3, 7, 6], "pct": -0.25}, {"name": "Seminara", "value": 36, "values": [4, 4, 9, 6, 5, 4, 4], "pct": 0.0}, {"name": "Brancaleone", "value": 33, "values": [4, 4, 3, 6, 2, 7, 7], "pct": 0.75}, {"name": "Gioiosa Ionica", "value": 32, "values": [5, 4, 3, 4, 1, 7, 8], "pct": 0.6}, {"name": "Oppido Mamertina", "value": 30, "values": [4, 7, 2, 4, 8, 2, 3], "pct": -0.25}, {"name": "Campo Calabro", "value": 27, "values": [8, 2, 4, 2, 1, 5, 5], "pct": -0.375}, {"name": "Monasterace", "value": 26, "values": [4, 7, 3, 3, 2, 2, 5], "pct": 0.25}, {"name": "Melicucco", "value": 25, "values": [3, 4, 6, 5, 2, 2, 3], "pct": 0.0}, {"name": "Mammola", "value": 24, "values": [2, 4, 1, 5, 2, 5, 5], "pct": 1.5}, {"name": "Palizzi", "value": 23, "values": [10, 1, 5, 3, 0, 4, 0], "pct": -1.0}, {"name": "San Luca", "value": 23, "values": [3, 8, 1, 1, 4, 2, 4], "pct": 0.333}, {"name": "Stignano", "value": 21, "values": [0, 4, 3, 1, 3, 5, 5], "pct": 1.0}, {"name": "Laureana di Borrello", "value": 19, "values": [3, 1, 4, 6, 0, 3, 2], "pct": -0.333}, {"name": "San Lorenzo", "value": 19, "values": [4, 1, 1, 2, 4, 4, 3], "pct": -0.25}, {"name": "Sant'Ilario dello Ionio", "value": 19, "values": [4, 3, 3, 0, 4, 0, 5], "pct": 0.25}, {"name": "Benestare", "value": 17, "values": [2, 2, 5, 2, 1, 1, 4], "pct": 1.0}, {"name": "Candidoni", "value": 16, "values": [2, 1, 1, 6, 1, 2, 3], "pct": 0.5}, {"name": "Grotteria", "value": 16, "values": [1, 4, 1, 2, 1, 5, 2], "pct": 1.0}, {"name": "Varapodio", "value": 13, "values": [1, 3, 3, 1, 2, 3, 0], "pct": -1.0}, {"name": "Africo", "value": 11, "values": [2, 3, 1, 1, 2, 1, 1], "pct": -0.5}, {"name": "Careri", "value": 11, "values": [1, 1, 2, 2, 1, 1, 3], "pct": 2.0}, {"name": "Portigliola", "value": 11, "values": [3, 3, 1, 0, 1, 0, 3], "pct": 0.0}, {"name": "Stilo", "value": 11, "values": [0, 3, 2, 3, 0, 2, 1], "pct": 1.0}, {"name": "Bruzzano Zeffirio", "value": 10, "values": [1, 2, 0, 3, 0, 1, 3], "pct": 2.0}, {"name": "Camini", "value": 10, "values": [1, 3, 1, 3, 0, 1, 1], "pct": 0.0}, {"name": "Plat", "value": 9, "values": [1, 0, 0, 2, 3, 2, 1], "pct": 0.0}, {"name": "Serrata", "value": 9, "values": [1, 1, 2, 2, 2, 1, 0], "pct": -1.0}, {"name": "Antonimina", "value": 8, "values": [0, 3, 0, 0, 0, 4, 1], "pct": 1.0}, {"name": "Gerace", "value": 8, "values": [2, 1, 0, 3, 1, 0, 1], "pct": -0.5}, {"name": "San Giorgio Morgeto", "value": 7, "values": [1, 1, 1, 0, 1, 2, 1], "pct": 0.0}, {"name": "Santa Cristina d'Aspromonte", "value": 7, "values": [2, 0, 1, 0, 2, 0, 2], "pct": 0.0}, {"name": "Feroleto della Chiesa", "value": 6, "values": [0, 0, 0, 1, 0, 0, 5], "pct": 1.0}, {"name": "Roghudi", "value": 6, "values": [0, 1, 1, 4, 0, 0, 0], "pct": 0.0}, {"name": "San Roberto", "value": 6, "values": [0, 0, 2, 1, 0, 1, 2], "pct": 1.0}, {"name": "Anoia", "value": 5, "values": [0, 1, 1, 1, 1, 0, 1], "pct": 1.0}, {"name": "Bova", "value": 4, "values": [0, 1, 0, 0, 1, 2, 0], "pct": 0.0}, {"name": "Casignana", "value": 4, "values": [2, 0, 0, 2, 0, 0, 0], "pct": -1.0}, {"name": "Delianuova", "value": 4, "values": [0, 0, 0, 1, 0, 2, 1], "pct": 1.0}, {"name": "Ferruzzano", "value": 4, "values": [3, 0, 1, 0, 0, 0, 0], "pct": -1.0}, {"name": "Pazzano", "value": 4, "values": [0, 1, 1, 0, 1, 1, 0], "pct": 0.0}, {"name": "Agnana Calabra", "value": 3, "values": [0, 0, 0, 1, 0, 0, 2], "pct": 1.0}, {"name": "Bivongi", "value": 3, "values": [0, 2, 0, 0, 0, 0, 1], "pct": 1.0}, {"name": "Cosoleto", "value": 3, "values": [1, 0, 0, 1, 1, 0, 0], "pct": -1.0}, {"name": "Placanica", "value": 3, "values": [0, 1, 0, 2, 0, 0, 0], "pct": 0.0}, {"name": "Sant'Eufemia d'Aspromonte", "value": 3, "values": [3, 0, 0, 0, 0, 0, 0], "pct": -1.0}, {"name": "Scido", "value": 3, "values": [0, 0, 1, 0, 0, 1, 1], "pct": 1.0}, {"name": "Terranova Sappo Minulio", "value": 3, "values": [1, 0, 0, 1, 0, 0, 1], "pct": 0.0}, {"name": "Bagaladi", "value": 2, "values": [1, 0, 0, 0, 0, 1, 0], "pct": -1.0}, {"name": "Cimin…", "value": 2, "values": [0, 0, 0, 0, 1, 0, 1], "pct": 1.0}, {"name": "Fiumara", "value": 2, "values": [0, 0, 0, 0, 1, 0, 1], "pct": 1.0}, {"name": "Galatro", "value": 2, "values": [0, 0, 0, 0, 1, 1, 0], "pct": 0.0}, {"name": "Molochio", "value": 2, "values": [0, 1, 0, 0, 0, 1, 0], "pct": 0.0}, {"name": "Calanna", "value": 1, "values": [1, 0, 0, 0, 0, 0, 0], "pct": -1.0}, {"name": "Canolo", "value": 1, "values": [0, 0, 0, 0, 0, 1, 0], "pct": 0.0}, {"name": "Caraffa del Bianco", "value": 1, "values": [0, 1, 0, 0, 0, 0, 0], "pct": 0.0}, {"name": "Cardeto", "value": 1, "values": [0, 0, 0, 1, 0, 0, 0], "pct": 0.0}, {"name": "Giffone", "value": 1, "values": [0, 1, 0, 0, 0, 0, 0], "pct": 0.0}, {"name": "Laganadi", "value": 1, "values": [0, 1, 0, 0, 0, 0, 0], "pct": 0.0}, {"name": "Maropati", "value": 1, "values": [0, 0, 0, 0, 0, 1, 0], "pct": 0.0}, {"name": "Martone", "value": 1, "values": [0, 0, 0, 1, 0, 0, 0], "pct": 0.0}, {"name": "Sant'Agata del Bianco", "value": 1, "values": [1, 0, 0, 0, 0, 0, 0], "pct": -1.0}, {"name": "Santo Stefano in Aspromonte", "value": 1, "values": [0, 0, 0, 1, 0, 0, 0], "pct": 0.0}, {"name": "Sinopoli", "value": 1, "values": [0, 0, 0, 0, 0, 1, 0], "pct": 0.0}, {"name": "Staiti", "value": 1, "values": [0, 0, 0, 0, 1, 0, 0], "pct": 0.0}]}, {"name": "VV", "pct": -0.098, "children": [{"name": "Vibo Valentia", "value": 498, "values": [101, 69, 86, 72, 54, 56, 60], "pct": -0.406}, {"name": "Pizzo", "value": 147, "values": [20, 19, 28, 27, 12, 17, 24], "pct": 0.2}, {"name": "Ionadi", "value": 43, "values": [11, 2, 6, 7, 5, 10, 2], "pct": -0.818}, {"name": "Ricadi", "value": 41, "values": [4, 7, 8, 3, 1, 7, 11], "pct": 1.75}, {"name": "Serra San Bruno", "value": 39, "values": [3, 4, 3, 8, 7, 9, 5], "pct": 0.667}, {"name": "Francavilla Angitola", "value": 36, "values": [6, 2, 5, 7, 1, 8, 7], "pct": 0.167}, {"name": "Mileto", "value": 34, "values": [5, 9, 5, 3, 4, 5, 3], "pct": -0.4}, {"name": "Soriano Calabro", "value": 34, "values": [5, 5, 5, 8, 3, 2, 6], "pct": 0.2}, {"name": "Rombiolo", "value": 33, "values": [4, 5, 6, 5, 5, 5, 3], "pct": -0.25}, {"name": "Maierato", "value": 31, "values": [1, 6, 4, 1, 4, 8, 7], "pct": 6.0}, {"name": "Tropea", "value": 31, "values": [0, 4, 4, 3, 6, 7, 7], "pct": 1.0}, {"name": "Nicotera", "value": 29, "values": [2, 5, 6, 6, 2, 2, 6], "pct": 2.0}, {"name": "Sant'Onofrio", "value": 29, "values": [7, 4, 6, 0, 3, 5, 4], "pct": -0.429}, {"name": "Parghelia", "value": 23, "values": [1, 4, 2, 4, 3, 3, 6], "pct": 5.0}, {"name": "Briatico", "value": 21, "values": [3, 1, 1, 4, 5, 4, 3], "pct": 0.0}, {"name": "Filandari", "value": 20, "values": [3, 2, 5, 4, 2, 3, 1], "pct": -0.667}, {"name": "Vazzano", "value": 16, "values": [1, 2, 0, 1, 5, 3, 4], "pct": 3.0}, {"name": "Filadelfia", "value": 15, "values": [3, 1, 2, 2, 4, 3, 0], "pct": -1.0}, {"name": "Spilinga", "value": 15, "values": [2, 1, 4, 2, 1, 2, 3], "pct": 0.5}, {"name": "San Calogero", "value": 14, "values": [4, 3, 0, 2, 3, 2, 0], "pct": -1.0}, {"name": "Zambrone", "value": 14, "values": [3, 2, 3, 3, 0, 2, 1], "pct": -0.667}, {"name": "Drapia", "value": 13, "values": [0, 0, 2, 1, 0, 5, 5], "pct": 1.0}, {"name": "Gerocarne", "value": 12, "values": [2, 1, 3, 1, 0, 4, 1], "pct": -0.5}, {"name": "Limbadi", "value": 11, "values": [4, 2, 1, 0, 0, 3, 1], "pct": -0.75}, {"name": "Stefanaconi", "value": 11, "values": [1, 1, 3, 1, 0, 2, 3], "pct": 2.0}, {"name": "Vallelonga", "value": 10, "values": [1, 2, 0, 3, 4, 0, 0], "pct": -1.0}, {"name": "Cessaniti", "value": 9, "values": [1, 2, 4, 0, 1, 0, 1], "pct": 0.0}, {"name": "Francica", "value": 8, "values": [0, 4, 0, 1, 2, 0, 1], "pct": 1.0}, {"name": "Joppolo", "value": 8, "values": [0, 0, 1, 3, 0, 1, 3], "pct": 1.0}, {"name": "Zungri", "value": 8, "values": [0, 0, 1, 3, 1, 2, 1], "pct": 1.0}, {"name": "Fabrizia", "value": 5, "values": [0, 1, 0, 0, 1, 1, 2], "pct": 1.0}, {"name": "San Gregorio d'Ippona", "value": 5, "values": [1, 1, 1, 0, 0, 2, 0], "pct": -1.0}, {"name": "Filogaso", "value": 4, "values": [0, 1, 0, 0, 2, 0, 1], "pct": 1.0}, {"name": "San Costantino Calabro", "value": 4, "values": [2, 0, 2, 0, 0, 0, 0], "pct": -1.0}, {"name": "Brognaturo", "value": 3, "values": [0, 1, 1, 1, 0, 0, 0], "pct": 0.0}, {"name": "Das…", "value": 3, "values": [1, 0, 0, 1, 1, 0, 0], "pct": -1.0}, {"name": "Dinami", "value": 3, "values": [1, 1, 0, 1, 0, 0, 0], "pct": -1.0}, {"name": "Mongiana", "value": 3, "values": [1, 0, 0, 1, 0, 0, 1], "pct": 0.0}, {"name": "Pizzoni", "value": 3, "values": [0, 1, 0, 0, 0, 2, 0], "pct": 0.0}, {"name": "Sorianello", "value": 3, "values": [0, 1, 0, 2, 0, 0, 0], "pct": 0.0}, {"name": "Arena", "value": 2, "values": [0, 2, 0, 0, 0, 0, 0], "pct": 0.0}, {"name": "Monterosso Calabro", "value": 2, "values": [0, 0, 0, 1, 0, 1, 0], "pct": 0.0}, {"name": "Nardodipace", "value": 2, "values": [0, 0, 0, 1, 0, 0, 1], "pct": 1.0}, {"name": "Simbario", "value": 2, "values": [0, 0, 0, 1, 1, 0, 0], "pct": 0.0}, {"name": "Spadola", "value": 2, "values": [0, 0, 0, 1, 1, 0, 0], "pct": 0.0}, {"name": "Acquaro", "value": 1, "values": [0, 0, 0, 0, 1, 0, 0], "pct": 0.0}, {"name": "Capistrano", "value": 1, "values": [0, 0, 0, 0, 0, 1, 0], "pct": 0.0}]}]}, "yearlyTotals": [2959, 2927, 2978, 2767, 2090, 2641, 2707], "top15": [{"comune": "Reggio di Calabria", "prov": "RC", "total": 2831, "values": [439, 438, 466, 440, 286, 369, 393]}, {"comune": "Crotone", "prov": "KR", "total": 999, "values": [147, 145, 165, 145, 125, 140, 132]}, {"comune": "Corigliano-Rossano", "prov": "CS", "total": 962, "values": [141, 143, 133, 161, 130, 120, 134]}, {"comune": "Lamezia Terme", "prov": "CZ", "total": 940, "values": [145, 149, 134, 146, 98, 131, 137]}, {"comune": "Cosenza", "prov": "CS", "total": 939, "values": [161, 165, 168, 127, 94, 111, 113]}, {"comune": "Catanzaro", "prov": "CZ", "total": 917, "values": [173, 155, 173, 119, 106, 138, 53]}, {"comune": "Rende", "prov": "CS", "total": 674, "values": [98, 101, 110, 111, 62, 86, 106]}, {"comune": "Vibo Valentia", "prov": "VV", "total": 498, "values": [101, 69, 86, 72, 54, 56, 60]}, {"comune": "Palmi", "prov": "RC", "total": 361, "values": [52, 61, 74, 44, 27, 55, 48]}, {"comune": "Villa San Giovanni", "prov": "RC", "total": 258, "values": [36, 50, 28, 42, 26, 30, 46]}, {"comune": "Siderno", "prov": "RC", "total": 245, "values": [43, 33, 25, 34, 23, 38, 49]}, {"comune": "Castrovillari", "prov": "CS", "total": 244, "values": [41, 49, 50, 36, 27, 21, 20]}, {"comune": "Cassano all'Ionio", "prov": "CS", "total": 216, "values": [44, 31, 30, 42, 14, 22, 33]}, {"comune": "Scalea", "prov": "CS", "total": 213, "values": [38, 26, 24, 31, 28, 26, 40]}, {"comune": "Locri", "prov": "RC", "total": 207, "values": [29, 42, 34, 24, 22, 31, 25]}]};
+const tooltip = d3.select("#tooltip");
+
+/* ---------------- Zoomable Sunburst ---------------- */
+(function() {
+  const width = 520;
+  const height = 520;
+  const radius = width / 6;
+
+  const color = d3.scaleLinear()
+    .domain([-1, 0, 2])
+    .range(["#1c7a3f", "#c9ccd6", "#b3261e"])
+    .clamp(true);
+
+  const hierarchy = d3.hierarchy(DATA.hierarchy)
+    .sum(d => d.value)
+    .sort((a, b) => b.value - a.value);
+
+  const root = d3.partition()
+    .size([2 * Math.PI, hierarchy.height + 1])
+    (hierarchy);
+
+  root.each(d => d.current = d);
+
+  const svg = d3.select("#sunburst")
+    .append("svg")
+    .attr("viewBox", [-width / 2, -height / 2, width, height])
+    .style("font", "10px sans-serif")
+    .style("max-width", "100%")
+    .style("height", "auto");
+
+  const arc = d3.arc()
+    .startAngle(d => d.x0)
+    .endAngle(d => d.x1)
+    .padAngle(d => Math.min((d.x1 - d.x0) / 2, 0.003))
+    .padRadius(radius * 1.5)
+    .innerRadius(d => d.y0 * radius)
+    .outerRadius(d => Math.max(d.y0 * radius, d.y1 * radius - 1));
+
+  const path = svg.append("g")
+    .selectAll("path")
+    .data(root.descendants().slice(1))
+    .join("path")
+    .attr("fill", d => color(d.data.pct || 0))
+    .attr("fill-opacity", d => arcVisible(d.current) ? (d.children ? 0.85 : 0.7) : 0)
+    .attr("pointer-events", d => arcVisible(d.current) ? "auto" : "none")
+    .attr("d", d => arc(d.current));
+
+  path.style("cursor", "pointer")
+    .on("click", clicked)
+    .on("mousemove", (event, d) => {
+      tooltip.style("opacity", 1)
+        .style("left", (event.pageX + 14) + "px")
+        .style("top", (event.pageY + 8) + "px")
+        .html(tooltipHtml(d));
+    })
+    .on("mouseleave", () => tooltip.style("opacity", 0));
+
+  const label = svg.append("g")
+    .attr("pointer-events", "none")
+    .attr("text-anchor", "middle")
+    .style("user-select", "none")
+    .selectAll("text")
+    .data(root.descendants().slice(1))
+    .join("text")
+    .attr("dy", "0.35em")
+    .attr("fill-opacity", d => +labelVisible(d.current))
+    .attr("transform", d => labelTransform(d.current))
+    .text(d => d.data.name);
+
+  const parent = svg.append("circle")
+    .datum(root)
+    .attr("r", radius)
+    .attr("fill", "none")
+    .attr("pointer-events", "all")
+    .on("click", clicked);
+
+  const centerLabel = svg.append("text")
+    .attr("id", "center-label")
+    .attr("text-anchor", "middle")
+    .attr("dy", "0.35em")
+    .attr("pointer-events", "none")
+    .style("font-size", "11px")
+    .style("fill", "#7a8199")
+    .text("⟲ Calabria");
+
+  function clicked(event, p) {
+    updateDetailPanel(p);
+    centerLabel.text(p.depth === 0 ? "⟲ Calabria" : "⟲ " + p.data.name);
+    parent.datum(p.parent || root);
+    root.each(d => d.target = {
+      x0: Math.max(0, Math.min(1, (d.x0 - p.x0) / (p.x1 - p.x0))) * 2 * Math.PI,
+      x1: Math.max(0, Math.min(1, (d.x1 - p.x0) / (p.x1 - p.x0))) * 2 * Math.PI,
+      y0: Math.max(0, d.y0 - p.depth),
+      y1: Math.max(0, d.y1 - p.depth)
+    });
+
+    const t = svg.transition().duration(650);
+
+    path.transition(t)
+      .tween("data", d => {
+        const i = d3.interpolate(d.current, d.target);
+        return t => d.current = i(t);
+      })
+      .filter(function(d) { return +this.getAttribute("fill-opacity") || arcVisible(d.target); })
+      .attr("fill-opacity", d => arcVisible(d.target) ? (d.children ? 0.85 : 0.7) : 0)
+      .attr("pointer-events", d => arcVisible(d.target) ? "auto" : "none")
+      .attrTween("d", d => () => arc(d.current));
+
+    label.filter(function(d) { return +this.getAttribute("fill-opacity") || labelVisible(d.target); })
+      .transition(t)
+      .attr("fill-opacity", d => +labelVisible(d.target))
+      .attrTween("transform", d => () => labelTransform(d.current));
+  }
+
+  function arcVisible(d) { return d.y1 <= 3 && d.y0 >= 0 && d.x1 > d.x0; }
+  function labelVisible(d) { return d.y1 <= 3 && d.y0 >= 1 && (d.y1 - d.y0) * (d.x1 - d.x0) > 0.05; }
+  function labelTransform(d) {
+    const x = (d.x0 + d.x1) / 2 * 180 / Math.PI;
+    const y = (d.y0 + d.y1) / 2 * radius;
+    return `rotate(${x - 90}) translate(${y},0) rotate(${x < 180 ? 0 : 180})`;
+  }
+
+  function tooltipHtml(d) {
+    const name = d.data.name;
+    const total = d.value.toLocaleString("it-IT");
+    const pct = d.data.pct !== undefined ? (d.data.pct * 100).toFixed(0) + "%" : "n/d";
+    return `<strong>${name}</strong><br>Totale 2016-2022: ${total}<br>Var. 2016&rarr;2022: ${pct}`;
+  }
+})();
+
+/* ---------------- Detail panel + sparkline ---------------- */
+function updateDetailPanel(d) {
+  const title = document.getElementById("detail-title");
+  const sub = document.getElementById("detail-sub");
+  const stats = document.getElementById("detail-stats");
+  const pctVal = d.data.pct || 0;
+  const pillClass = pctVal > 0.05 ? "up" : (pctVal < -0.05 ? "down" : "");
+  const pillText = pctVal > 0 ? "+" + Math.round(pctVal*100) + "%" : Math.round(pctVal*100) + "%";
+
+  title.innerHTML = d.data.name + (pillClass ? `<span class="pill ${pillClass}">${pillText}</span>` : "");
+  sub.textContent = `Totale: ${d.value.toLocaleString("it-IT")} incidenti` + (d.depth ? ` — livello: ${d.depth === 1 ? "Provincia" : "Comune"}` : "");
+
+  if (d.data.values) {
+    const rows = DATA.years.map((y, i) => `<tr><td>${y}</td><td style="text-align:right">${d.data.values[i]}</td></tr>`).join("");
+    stats.innerHTML = `<table style="width:100%;border-collapse:collapse">${rows}</table>`;
+    drawSparkline(d.data.values);
+  } else {
+    stats.innerHTML = "";
+    d3.select("#sparkline").selectAll("*").remove();
+  }
+}
+
+function drawSparkline(values) {
+  const container = d3.select("#sparkline");
+  container.selectAll("*").remove();
+  const w = 480, h = 120, m = { top: 10, right: 10, bottom: 24, left: 34 };
+  const svg = container.append("svg").attr("viewBox", `0 0 ${w} ${h}`);
+  const x = d3.scalePoint().domain(DATA.years).range([m.left, w - m.right]);
+  const y = d3.scaleLinear().domain([0, d3.max(values) * 1.15]).range([h - m.bottom, m.top]);
+  const line = d3.line().x((d, i) => x(DATA.years[i])).y(d => y(d));
+
+  svg.append("g").attr("transform", `translate(0,${h - m.bottom})`)
+    .attr("class", "axis")
+    .call(d3.axisBottom(x));
+  svg.append("g").attr("transform", `translate(${m.left},0)`)
+    .attr("class", "axis")
+    .call(d3.axisLeft(y).ticks(4));
+
+  svg.append("path").datum(values)
+    .attr("fill", "none").attr("stroke", "#3457d5").attr("stroke-width", 2)
+    .attr("d", line);
+
+  svg.selectAll("circle").data(values).join("circle")
+    .attr("cx", (d, i) => x(DATA.years[i]))
+    .attr("cy", d => y(d))
+    .attr("r", 3.5)
+    .attr("fill", "#3457d5");
+}
+
+// init with root
+updateDetailPanel({ data: DATA.hierarchy, value: DATA.yearlyTotals.reduce((a,b)=>a+b,0), depth: 0 });
+
+/* ---------------- Regional trend chart ---------------- */
+(function() {
+  const w = 480, h = 260, m = { top: 16, right: 20, bottom: 30, left: 44 };
+  const svg = d3.select("#trend-chart").append("svg").attr("viewBox", `0 0 ${w} ${h}`);
+  const x = d3.scalePoint().domain(DATA.years).range([m.left, w - m.right]).padding(0.5);
+  const y = d3.scaleLinear().domain([0, d3.max(DATA.yearlyTotals) * 1.15]).range([h - m.bottom, m.top]);
+
+  svg.append("g").attr("class", "axis").attr("transform", `translate(0,${h - m.bottom})`).call(d3.axisBottom(x));
+  svg.append("g").attr("class", "axis").attr("transform", `translate(${m.left},0)`).call(d3.axisLeft(y).ticks(5));
+
+  const area = d3.area().x((d,i) => x(DATA.years[i])).y0(y(0)).y1(d => y(d)).curve(d3.curveMonotoneX);
+  const line = d3.line().x((d,i) => x(DATA.years[i])).y(d => y(d)).curve(d3.curveMonotoneX);
+
+  svg.append("path").datum(DATA.yearlyTotals).attr("fill", "#3457d5").attr("fill-opacity", 0.12).attr("d", area);
+  svg.append("path").datum(DATA.yearlyTotals).attr("fill", "none").attr("stroke", "#3457d5").attr("stroke-width", 2.5).attr("d", line);
+
+  svg.selectAll("circle").data(DATA.yearlyTotals).join("circle")
+    .attr("cx", (d,i) => x(DATA.years[i])).attr("cy", d => y(d)).attr("r", 4)
+    .attr("fill", (d,i) => DATA.years[i] === 2020 ? "#b3261e" : "#3457d5")
+    .style("cursor", "pointer")
+    .on("mousemove", (event, d) => {
+      const i = DATA.yearlyTotals.indexOf(d);
+      tooltip.style("opacity", 1)
+        .style("left", (event.pageX + 14) + "px").style("top", (event.pageY + 8) + "px")
+        .html(`<strong>${DATA.years[i]}</strong><br>${d.toLocaleString("it-IT")} incidenti`);
+    })
+    .on("mouseleave", () => tooltip.style("opacity", 0));
+
+  svg.append("text").attr("id", "covid-note")
+    .attr("x", x(2020)).attr("y", y(DATA.yearlyTotals[4]) - 12)
+    .attr("text-anchor", "middle")
+    .text("↓ 2020 (lockdown)");
+})();
+
+/* ---------------- Top 15 bar chart ---------------- */
+(function() {
+  const data = DATA.top15;
+  const w = 480, barH = 24, m = { top: 10, right: 50, bottom: 10, left: 130 };
+  const h = data.length * barH + m.top + m.bottom;
+  const svg = d3.select("#bar-chart").append("svg").attr("viewBox", `0 0 ${w} ${h}`);
+  const x = d3.scaleLinear().domain([0, d3.max(data, d => d.total)]).range([m.left, w - m.right]);
+  const y = d3.scaleBand().domain(data.map(d => d.comune)).range([m.top, h - m.bottom]).padding(0.2);
+
+  const color = d3.scaleOrdinal()
+    .domain(["RC","CS","CZ","KR","VV"])
+    .range(["#3457d5","#8a5cf6","#f2994a","#27ae60","#eb5757"]);
+
+  svg.selectAll("rect").data(data).join("rect")
+    .attr("x", m.left).attr("y", d => y(d.comune))
+    .attr("width", d => x(d.total) - m.left).attr("height", y.bandwidth())
+    .attr("rx", 3)
+    .attr("fill", d => color(d.prov))
+    .style("cursor", "pointer")
+    .on("mousemove", (event, d) => {
+      tooltip.style("opacity", 1)
+        .style("left", (event.pageX + 14) + "px").style("top", (event.pageY + 8) + "px")
+        .html(`<strong>${d.comune}</strong> (${d.prov})<br>${d.total.toLocaleString("it-IT")} incidenti totali`);
+    })
+    .on("mouseleave", () => tooltip.style("opacity", 0));
+
+  svg.selectAll(".bar-label").data(data).join("text")
+    .attr("class", "bar-label")
+    .attr("x", m.left - 8).attr("y", d => y(d.comune) + y.bandwidth()/2)
+    .attr("dy", "0.35em").attr("text-anchor", "end")
+    .text(d => d.comune);
+
+  svg.selectAll(".bar-value").data(data).join("text")
+    .attr("class", "bar-value")
+    .attr("x", d => x(d.total) + 6).attr("y", d => y(d.comune) + y.bandwidth()/2)
+    .attr("dy", "0.35em")
+    .text(d => d.total.toLocaleString("it-IT"));
+})();
+</script>
+</body>
+</html>

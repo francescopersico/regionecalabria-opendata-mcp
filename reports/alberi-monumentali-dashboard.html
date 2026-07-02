@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alberi monumentali della Calabria — Mappa e tabella</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    margin: 0; padding: 24px 32px 60px;
+    background: #f7f8fb; color: #1c2333;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  p.subtitle { margin: 0 0 20px; color: #58607a; font-size: 14px; }
+  p.subtitle a { color: #3457d5; }
+  .card {
+    background: #fff; border-radius: 14px; padding: 18px 20px; margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(20,25,50,0.08), 0 1px 2px rgba(20,25,50,0.06);
+  }
+  .card h2 { font-size: 15px; margin: 0 0 4px; }
+  .card p.hint { margin: 0 0 12px; font-size: 12px; color: #7a8199; }
+
+  /* Filters */
+  #filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 11px; font-weight: 600; color: #58607a; text-transform: uppercase; letter-spacing: .02em; }
+  .field input, .field select {
+    font-size: 13px; padding: 7px 10px; border-radius: 8px; border: 1px solid #d8dcea;
+    background: #fbfbfd; color: #1c2333; min-width: 160px;
+  }
+  .field input:focus, .field select:focus { outline: 2px solid #3457d5; outline-offset: 1px; }
+  #search-field { flex: 1 1 220px; }
+  #search-field input { width: 100%; min-width: 200px; }
+  button#reset-btn {
+    font-size: 13px; padding: 8px 14px; border-radius: 8px; border: 1px solid #3457d5;
+    background: #fff; color: #3457d5; cursor: pointer; font-weight: 600;
+  }
+  button#reset-btn:hover { background: #eef1fd; }
+  #result-count { font-size: 12px; color: #58607a; margin-left: auto; align-self: center; white-space: nowrap; }
+  #result-count strong { color: #1c2333; }
+
+  /* Map */
+  #map { height: 560px; border-radius: 10px; }
+  .leaflet-popup-content { font-size: 12.5px; line-height: 1.5; min-width: 200px; }
+  .leaflet-popup-content b.popup-title { font-size: 13.5px; }
+  .popup-crit { color: #58607a; font-size: 11.5px; }
+
+  /* Table */
+  #table-wrap { overflow-x: auto; }
+  table#trees-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table#trees-table th, table#trees-table td {
+    padding: 8px 10px; text-align: left; border-bottom: 1px solid #eceef5; white-space: nowrap;
+  }
+  table#trees-table td.wrap { white-space: normal; max-width: 260px; }
+  table#trees-table thead th {
+    position: sticky; top: 0; background: #fff; cursor: pointer; user-select: none;
+    color: #58607a; font-size: 11px; text-transform: uppercase; letter-spacing: .02em;
+    border-bottom: 2px solid #d8dcea;
+  }
+  table#trees-table thead th:hover { color: #3457d5; }
+  table#trees-table thead th .arrow { font-size: 10px; margin-left: 3px; opacity: .6; }
+  table#trees-table tbody tr { cursor: pointer; }
+  table#trees-table tbody tr:hover { background: #f5f7ff; }
+  table#trees-table tbody tr.highlight { background: #eef1fd; }
+  .sci { font-style: italic; color: #7a8199; font-size: 11px; display: block; }
+  .badge {
+    display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 10.5px;
+    background: #eef1fd; color: #3457d5; margin: 1px 2px 1px 0;
+  }
+  .badge.urb { background: #fdeee1; color: #b3611e; }
+  .badge.rur { background: #dcf3e4; color: #1c7a3f; }
+  code.scheda { font-size: 11px; color: #7a8199; }
+  .btn-locate {
+    font-size: 11px; padding: 3px 8px; border-radius: 6px; border: 1px solid #3457d5;
+    background: #fff; color: #3457d5; cursor: pointer;
+  }
+  .btn-locate:hover { background: #eef1fd; }
+  footer.note { font-size: 11.5px; color: #9aa1b5; margin-top: 8px; }
+</style>
+</head>
+<body>
+  <h1>Alberi monumentali della Calabria</h1>
+  <p class="subtitle">
+    Fonte: dataset <a href="https://dati.regione.calabria.it/opendata/dataset/alberi-monumentali" target="_blank" rel="noopener">"Alberi monumentali"</a>,
+    Regione Calabria Open Data (Dipartimento Territorio e Tutela dell'Ambiente, licenza CC-BY-4.0, censimento ai sensi del D.M. Politiche agricole 23/10/2014).
+    119 alberi/gruppi arborei censiti nelle 5 province.
+  </p>
+
+  <div class="card">
+    <h2>Filtri</h2>
+    <p class="hint">Cerca liberamente oppure filtra per provincia e specie. I filtri si applicano sia alla mappa che alla tabella.</p>
+    <div id="filters">
+      <div class="field" id="search-field">
+        <label for="f-search">Ricerca libera</label>
+        <input id="f-search" type="search" placeholder="Comune, località, specie…">
+      </div>
+      <div class="field">
+        <label for="f-provincia">Provincia</label>
+        <select id="f-provincia"><option value="">Tutte</option></select>
+      </div>
+      <div class="field">
+        <label for="f-specie">Specie</label>
+        <select id="f-specie"><option value="">Tutte</option></select>
+      </div>
+      <button id="reset-btn" type="button">Azzera filtri</button>
+      <div id="result-count"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Mappa</h2>
+    <p class="hint">Clicca un marker per i dettagli. I marker vicini vengono raggruppati (cluster): clicca un cluster per zoomare.</p>
+    <div id="map"></div>
+  </div>
+
+  <div class="card">
+    <h2>Tabella</h2>
+    <p class="hint">Clicca un'intestazione per ordinare, clicca una riga (o il pulsante "Mappa") per localizzare l'albero sulla mappa.</p>
+    <div id="table-wrap">
+      <table id="trees-table">
+        <thead>
+          <tr>
+            <th data-key="prov">Provincia</th>
+            <th data-key="comune">Comune</th>
+            <th data-key="loc">Località</th>
+            <th data-key="name">Specie</th>
+            <th data-key="alt">Altitudine (m)</th>
+            <th data-key="circ">Circonferenza (cm)</th>
+            <th data-key="h">Altezza (m)</th>
+            <th data-key="urbano">Contesto</th>
+            <th data-key="crit">Criteri di monumentalità</th>
+            <th data-key="scheda">Scheda</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="trees-tbody"></tbody>
+      </table>
+    </div>
+    <footer class="note">Dati grezzi come pubblicati dalla Regione Calabria; alcune schede riportano valori aggregati (es. "med"/"max") per gruppi omogenei di alberi.</footer>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script>
+/* ---------------- Dataset ----------------
+   Snapshot: dataset "alberi-monumentali" (id 90c1ea0f-e896-4f39-aca8-e1abd4e05697),
+   resource "Alberi monumentali.csv" (id 84de64fb-0d61-4c17-bb00-5f00840dba3b),
+   fetched via datastore_search on dati.regione.calabria.it, 119 record totali. */
+const RAW_TREES = [
+{id:1,scheda:"01/A155/CZ/18",prov:"Catanzaro",comune:"Albi",loc:"Villaggio Buturo - Centro Visite",alt:1558,urbano:"no",sci:"Fagus sylvatica L.",name:"Faggio",circ:"460",h:"27",crit:"a) età e/o dimensioni",lat:"39,07335278",lon:"16,63663611"},
+{id:2,scheda:"04/A155/CZ/18",prov:"Catanzaro",comune:"Albi",loc:"Villaggio Buturo - Centro Visite",alt:1533,urbano:"no",sci:"Fagus sylvatica L.",name:"Faggio",circ:"470",h:"36",crit:"a) età e/o dimensioni",lat:"39,07261111",lon:"16,63846944"},
+{id:3,scheda:"06/A155/CZ/18",prov:"Catanzaro",comune:"Albi",loc:"Villaggio Buturo - Casa Giulia",alt:1552,urbano:"no",sci:"Abies alba Mill.",name:"Abete bianco",circ:"410",h:"34",crit:"a) età e/o dimensioni",lat:"39,0686",lon:"16,6402"},
+{id:4,scheda:"01/A736/CZ/18",prov:"Catanzaro",comune:"Belcastro",loc:"Centro Storico - Piazza Margherita",alt:496,urbano:"si`",sci:"Celtis australis L.",name:"Bagolaro",circ:"290",h:"16",crit:"a) eta` e/o dimensioni\nc) valore ecologico",lat:"39,01758333",lon:"16,78396111"},
+{id:5,scheda:"01/C542/CZ/18",prov:"Catanzaro",comune:"Cerva",loc:"Melitani",alt:1200,urbano:"no",sci:"Castanea sativa Mill.",name:"Castagno",circ:"930",h:"27",crit:"a) età e/o dimensioni\nb) forma e portamento\nc) valore ecologico\ne) architettura vegetale\nf) pregio paesaggistico\ng) valore storico, culturale, religioso",lat:"39,04086389",lon:"16,72285556"},
+{id:6,scheda:"01/D218/CZ/18",prov:"Catanzaro",comune:"Curinga",loc:"Sant'Elia - Vrisi",alt:460,urbano:"no",sci:"Platanus orientalis L.",name:"Platano orientale",circ:"1200",h:"21",crit:"a) età e/o dimensioni\nc) valore ecologico\nd) rarità botanica",lat:"38,823075",lon:"16,33251944"},
+{id:7,scheda:"01/I844/CZ/18",prov:"Catanzaro",comune:"Sorbo San Basile",loc:"Colle Sant'Elia",alt:840,urbano:"no",sci:"Castanea sativa Mill.",name:"Castagno",circ:"840",h:"19",crit:"a) eta` e/o dimensioni",lat:"39,03226389",lon:"16,49020556"},
+{id:8,scheda:"01/L070/CZ/18",prov:"Catanzaro",comune:"Taverna",loc:"Frainella - Colle del Telegrafo",alt:1542,urbano:"no",sci:"Abies alba Mill.",name:"Abete bianco",circ:"600",h:"40",crit:"a) età e/o dimensioni",lat:"39,095",lon:"16,6161"},
+{id:9,scheda:"02/L070/CZ/18",prov:"Catanzaro",comune:"Taverna",loc:"Pomo",alt:1472,urbano:"no",sci:"Pinus nigra subsp. laricio Maire",name:"Pino laricio",circ:"530",h:"23",crit:"a) età e/o dimensioni\nb) forma e portamento\nd) rarità botanica",lat:"39,10277778",lon:"16,57996667"},
+{id:10,scheda:"03/L070/CZ/18",prov:"Catanzaro",comune:"Taverna",loc:"Marù",alt:1554,urbano:"no",sci:"Fagus sylvatica L.",name:"Faggio",circ:"440",h:"32",crit:"a) età e/o dimensioni\nc) valore ecologico",lat:"39,1133",lon:"16,5727"},
+{id:11,scheda:"07/L070/CZ/18",prov:"Catanzaro",comune:"Taverna",loc:"Gariglione",alt:1664,urbano:"no",sci:"Insieme omogeneo di Abies alba Mill.",name:"Abete bianco",circ:"440 (med) / 460 (max)",h:"37,5 (med) / 40,0 (max)",crit:"a) età e/o dimensioni\nc) valore ecologico\nd) rarità botanica",lat:"39,13199167",lon:"16,64008611"},
+{id:12,scheda:"10/L070/CZ/18",prov:"Catanzaro",comune:"Taverna",loc:"Gariglione",alt:1714,urbano:"no",sci:"Fagus sylvatica L.",name:"Faggio",circ:"415",h:"30",crit:"a) età e/o dimensioni\nc) valore ecologico",lat:"39,13301667",lon:"16,64080278"},
+{id:13,scheda:"13/L070/CZ/18",prov:"Catanzaro",comune:"Taverna",loc:"Gariglione",alt:1729,urbano:"no",sci:"Abies alba Mill.",name:"Abete bianco",circ:"410",h:"33",crit:"a) età e/o dimensioni\nd) rarità botanica",lat:"39,13427778",lon:"16,63694444"},
+{id:14,scheda:"15/L070/CZ/18",prov:"Catanzaro",comune:"Taverna",loc:"Gariglione",alt:1705,urbano:"no",sci:"Abies alba Mill.",name:"Abete bianco",circ:"515",h:"25",crit:"a) età e/o dimensioni\nd) rarità botanica",lat:"39,13276667",lon:"16,63888056"},
+{id:15,scheda:"01/A160/CS/18",prov:"Cosenza",comune:"Albidona",loc:"Viale Italia",alt:750,urbano:"sì",sci:"Pyrus pyraster (L.) Burgsd.",name:"Pero selvatico",circ:"135-70",h:"6",crit:"a) età e/o dimensioni\ng) valore storico, culturale, religioso",lat:"39,92271667",lon:"16,47375556"},
+{id:16,scheda:"02/A160/CS/18",prov:"Cosenza",comune:"Albidona",loc:"Fontana Lungro",alt:613,urbano:"no",sci:"Populus canescens (Aiton) Sm.",name:"Pioppo canescente",circ:"575",h:"21,5",crit:"a) età e/o dimensioni\nb) forma e portamento",lat:"39,90337778",lon:"16,48389722"},
+{id:17,scheda:"03/A160/CS/18",prov:"Cosenza",comune:"Albidona",loc:"Forra Martino",alt:536,urbano:"no",sci:"Pinus halepensis Mill.",name:"Pino d'Aleppo",circ:"380",h:"18,5",crit:"a) età e/o dimensioni\nb) forma e portamento",lat:"39,90970833",lon:"16,48669722"},
+{id:18,scheda:"05/A340/CS/18",prov:"Cosenza",comune:"Aprigliano",loc:"Baracchelle",alt:1327,urbano:"no",sci:"Insieme omogeneo di Sequoia sempervirens (D. Don) Endl.",name:"Sequoia sempreverde",circ:"600 (med) / 700 (max)",h:"21,0 (med) / 25,0 (max)",crit:"a) età e/o dimensioni",lat:"39,23215",lon:"16,47876111"},
+{id:19,scheda:"06/A340/CS/18",prov:"Cosenza",comune:"Aprigliano",loc:"Lardone",alt:1360,urbano:"no",sci:"Sequoiadendron giganteum (Lindl.) J. Buchholz",name:"Sequoia gigante",circ:"780",h:"25",crit:"a) età e/o dimensioni",lat:"39,25009167",lon:"16,40126389"},
+{id:20,scheda:"07/A340/CS/18",prov:"Cosenza",comune:"Aprigliano",loc:"Lardone",alt:1360,urbano:"no",sci:"Abies nordmanniana (Steven) Spach",name:"Abete del Caucaso",circ:"760",h:"28",crit:"a) età e/o dimensioni\nb) forma e portamento",lat:"39,0025",lon:"16,40138056"},
+{id:21,scheda:"01/A762/CS/18",prov:"Cosenza",comune:"Belmonte Calabro",loc:"Iannizzi Casalini",alt:791,urbano:"no",sci:"Castanea sativa Mill.",name:"Castagno",circ:"670",h:"26,5",crit:"a) età e/o dimensioni",lat:"39,19447778",lon:"16,11277778"},
+{id:22,scheda:"01/B270/CS/18",prov:"Cosenza",comune:"Buonvicino",loc:"Filicaro",alt:800,urbano:"no",sci:"Quercus ilex L.",name:"Leccio",circ:"430",h:"24",crit:"a) età e/o dimensioni\nb) forma e portamento\nc) valore ecologico",lat:"39,68440556",lon:"15,92998333"},
+{id:23,scheda:"02/C349/CS/18",prov:"Cosenza",comune:"Castrovillari",loc:"Via Pasquale Laghi 7",alt:365,urbano:"sì",sci:"Quercus robur L.",name:"Farnia",circ:"560",h:"16,5",crit:"a) età e/o dimensioni",lat:"39,81671667",lon:"16,21107778"},
+{id:24,scheda:"04/C349/CS/18",prov:"Cosenza",comune:"Castrovillari",loc:"Pollinello",alt:2004,urbano:"no",sci:"Pinus heldreichii Christ syn Pinus leucodermis Antoine",name:"Pino loricato",circ:"600",h:"12",crit:"a) età e/o dimensioni\nb) forma e portamento\nc) valore ecologico\nd) rarità botanica\nf) pregio paesaggistico",lat:"39,89978889",lon:"16,18483056"},
+{id:25,scheda:"01/C489/CS/18",prov:"Cosenza",comune:"Cerchiara di Calabria",loc:"Venaglie",alt:960,urbano:"no",sci:"Quercus pubescens Willd.",name:"Roverella",circ:"610",h:"15",crit:"a) età e/o dimensioni\nb) forma e portamento",lat:"39,84535556",lon:"16,35979167"},
+{id:26,scheda:"02/C489/CS/18",prov:"Cosenza",comune:"Cerchiara di Calabria",loc:"San Fele",alt:625,urbano:"no",sci:"Fraxinus excelsior L.",name:"Frassino maggiore",circ:"430",h:"18",crit:"a) età e/o dimensioni\nb) forma e portamento",lat:"39,83345833",lon:"16,36389167"},
+{id:27,scheda:"03/C489/CS/18",prov:"Cosenza",comune:"Cerchiara di Calabria",loc:"Serra delle Ciavole - Piano di Acquafredda",alt:1853,urbano:"no",sci:"Pinus heldreichii Christ syn Pinus leucodermis Antoine",name:"Pino loricato",circ:"450",h:"15",crit:"a) età e/o dimensioni\nb) forma e portamento\nc) valore ecologico\nd) rarità botanica\nf) pregio paesaggistico",lat:"39,90472222",lon:"16,22333333"},
+{id:28,scheda:"02/C560/CS/18",prov:"Cosenza",comune:"Cerzeto",loc:"Passo Guardia",alt:1018,urbano:"no",sci:"Fagus sylvatica L.",name:"Faggio",circ:"470",h:"39,5",crit:"a) età e/o dimensioni\ng) valore storico, culturale, religioso",lat:"39,48753056",lon:"16,07136389"},
+{id:29,scheda:"03/M403/CS/18",prov:"Cosenza",comune:"Corigliano Calabro",loc:"Baraccone",alt:928,urbano:"no",sci:"Castanea sativa Mill.",name:"Castagno",circ:"990",h:"15",crit:"a) età e/o dimensioni",lat:"39,52236111",lon:"16,52054167"},
+{id:30,scheda:"01/M403/CS/18",prov:"Cosenza",comune:"Corigliano-Rossano",loc:"Finaita",alt:1016,urbano:"no",sci:"Insieme omogeneo di Castanea sativa Mill.",name:"Castagno",circ:"566 (med) / 877 (max)",h:"14,0 (med) / 28,0 (max)",crit:"a) età e/o dimensioni\nb) forma e portamento\nc) valore ecologico\nf) pregio paesaggistico",lat:"39,53834444",lon:"16,56283333"},
+{id:31,scheda:"02/M403/CS/18",prov:"Cosenza",comune:"Corigliano-Rossano",loc:"Frasso - Amarelli",alt:23,urbano:"sì",sci:"Olea europaea L.",name:"Olivo",circ:"670",h:"18",crit:"a) età e/o dimensioni\nb) forma e portamento\nf) pregio paesaggistico",lat:"39,61031944",lon:"16,63519167"},
+{id:32,scheda:"04/D464/CS/18",prov:"Cosenza",comune:"Fagnano Castello",loc:"Nciddra",alt:776,urbano:"no",sci:"Castanea sativa Mill.",name:"Castagno",circ:"600",h:"12",crit:"a) eta` e/o dimensioni",lat:"39,571075",lon:"16,03302778"},
+{id:33,scheda:"05/D464/CS/18",prov:"Cosenza",comune:"Fagnano Castello",loc:"Mazzancollo",alt:827,urbano:"no",sci:"Castanea sativa Mill.",name:"Castagno",circ:"620",h:"15",crit:"a) eta` e/o dimensioni\nb) forma e portamento",lat:"39,57355278",lon:"16,02478611"},
+{id:34,scheda:"06/D464/CS/18",prov:"Cosenza",comune:"Fagnano Castello",loc:"Mazzancollo",alt:827,urbano:"no",sci:"Castanea sativa Mill.",name:"Castagno",circ:"600",h:"12",crit:"a) eta` e/o dimensioni",lat:"39,57389722",lon:"16,02470833"},
+{id:35,scheda:"01/E185/CS/18",prov:"Cosenza",comune:"Grisolia",loc:"Monte",alt:685,urbano:"no",sci:"Castanea sativa Mill.",name:"Castagno",circ:"1400",h:"15",crit:"a) età e/o dimensioni\nb) forma e portamento\nc) valore ecologico",lat:"39,722825",lon:"15,90639722"},
+{id:36,scheda:"02/E185/CS/18",prov:"Cosenza",comune:"Grisolia",loc:"Monte",alt:718,urbano:"no",sci:"Castanea sativa Mill.",name:"Castagno",circ:"860",h:"15",crit:"a) età e/o dimensioni\nc) valore ecologico",lat:"39,722",lon:"15,9063"},
+{id:37,scheda:"03/E185/CS/18",prov:"Cosenza",comune:"Grisolia",loc:"Monte",alt:685,urbano:"no",sci:"Castanea sativa Mill.",name:"Castagno",circ:"628",h:"20",crit:"a) età e/o dimensioni\nc) valore ecologico",lat:"39,72278889",lon:"15,90641667"},
+{id:38,scheda:"01/E417/CS/18",prov:"Cosenza",comune:"Laino Borgo",loc:"Licari",alt:298,urbano:"no",sci:"Quercus pubescens Willd.",name:"Roverella",circ:"490",h:"20",crit:"a) età e/o dimensioni\nb) forma e portamento\nc) valore ecologico\nf) pregio paesaggistico\ng) valore storico, culturale, religioso",lat:"39,97458611",lon:"15,99355"},
+{id:39,scheda:"01/E678/CS/18",prov:"Cosenza",comune:"Longobucco",loc:"Maddalena",alt:1200,urbano:"no",sci:"Pinus nigra subsp. laricio Maire",name:"Pino laricio",circ:"510",h:"28",crit:"a) età e/o dimensioni\nb) forma e portamento",lat:"39,43444444",lon:"16,59972222"},
+{id:40,scheda:"04/E678/CS/18",prov:"Cosenza",comune:"Longobucco",loc:"Fossiata",alt:1256,urbano:"no",sci:"Pinus nigra subsp. laricio Maire",name:"Pino laricio",circ:"262",h:"31,5",crit:"b) forma e portamento",lat:"39,39761111",lon:"16,59897778"},
+{id:41,scheda:"07/E678/CS/18",prov:"Cosenza",comune:"Longobucco",loc:"Santa Barbara",alt:1371,urbano:"no",sci:"Pinus nigra subsp. laricio Maire",name:"Pino laricio",circ:"580",h:"21",crit:"a) età e/o dimensioni\nb) forma e portamento",lat:"39,38666667",lon:"16,62722222"},
+{id:42,scheda:"01/F001/CS/18",prov:"Cosenza",comune:"Marzi",loc:"Orsara",alt:883,urbano:"no",sci:"Castanea sativa Mill.",name:"Castagno",circ:"850",h:"20",crit:"a) età e/o dimensioni",lat:"39,15303889",lon:"16,37056389"},
+{id:43,scheda:"02/F001/CS/18",prov:"Cosenza",comune:"Marzi",loc:"Contrada Tozzo",alt:582,urbano:"no",sci:"Quercus pubescens Willd.",name:"Roverella",circ:"300",h:"20",crit:"b) forma e portamento\nc) valore ecologico\ng) valore storico, culturale, religioso",lat:"39,17194722",lon:"16,31014444"},
+{id:44,scheda:"01/F708/CS/18",prov:"Cosenza",comune:"Morano Calabro",loc:"Villa Comunale",alt:580,urbano:"sì",sci:"Cedrus deodara (D.Don) G.Don",name:"Cedro dell'Himalaya",circ:"470",h:"24,5",crit:"a) età e/o dimensioni\ng) valore storico, culturale, religioso",lat:"39,84162778",lon:"16,13761667"},
+{id:45,scheda:"02/F708/CS/18",prov:"Cosenza",comune:"Morano Calabro",loc:"Pollinello",alt:1530,urbano:"no",sci:"Pinus heldreichii Christ syn Pinus leucodermis Antoine",name:"Pino loricato",circ:"620",h:"16",crit:"a) età e/o dimensioni\nb) forma e portamento\nc) valore ecologico\nd) rarità botanica\nf) pregio paesaggistico",lat:"39,89780278",lon:"16,17138889"},
+{id:46,scheda:"01/G400/CS/18",prov:"Cosenza",comune:"Pedace",loc:"Le Macchie",alt:1500,urbano:"no",sci:"Fagus sylvatica L.",name:"Faggio",circ:"352-350-255-220-180",h:"19",crit:"a) età e/o dimensioni\nb) forma e portamento",lat:"39,26959444",lon:"16,53574167"},
+{id:47,scheda:"01/H490/CS/18",prov:"Cosenza",comune:"Rogliano",loc:"Bocchineri",alt:609,urbano:"sì",sci:"Quercus petraea subsp. austrotyrrhenica Brullo, R.Guarino & Siracusa",name:"Rovere",circ:"450",h:"27,5",crit:"a) età e/o dimensioni\nb) forma e portamento",lat:"39,18784444",lon:"16,31988889"},
+{id:48,scheda:"02/H490/CS/18",prov:"Cosenza",comune:"Rogliano",loc:"Fravica",alt:1000,urbano:"no",sci:"Quercus petraea subsp. austrotyrrhenica Brullo, R.Guarino & Siracusa",name:"Rovere",circ:"560",h:"24,5",crit:"a) età e/o dimensioni\nb) forma e portamento\ne) architettura vegetale",lat:"39,18825",lon:"16,40945833"},
+{id:49,scheda:"01/H765/CS/18",prov:"Cosenza",comune:"San Basile",loc:"Via Diaz 42",alt:550,urbano:"si`",sci:"Olea europaea L.",name:"Olivo",circ:"690",h:"7,5",crit:"a) eta` e/o dimensioni\nc) valore ecologico\nf) pregio paesaggistico",lat:"39,81128611",lon:"16,16440833"},
+{id:50,scheda:"02/H765/CS/18",prov:"Cosenza",comune:"San Basile",loc:"Via Liberta'",alt:550,urbano:"si`",sci:"Olea europaea L.",name:"Olivo",circ:"720",h:"6",crit:"a) eta` e/o dimensioni\nb) forma e portamento\nc) valore ecologico\ne) architettura vegetale\nf) pregio paesaggistico",lat:"39,81051667",lon:"16,16137778"},
+{id:51,scheda:"01/H919/CS/18",prov:"Cosenza",comune:"San Giovanni in Fiore",loc:"Serrisi",alt:1252,urbano:"no",sci:"Castanea sativa Mill.",name:"Castagno",circ:"650",h:"16",crit:"a) età e/o dimensioni",lat:"39,30505278",lon:"16,65679444"},
+{id:52,scheda:"01/I108/CS/18",prov:"Cosenza",comune:"San Pietro in Amantea",loc:"Piazza Iv Novembre",alt:379,urbano:"sì",sci:"Platanus orientalis L.",name:"Platano orientale",circ:"467",h:"32",crit:"a) età e/o dimensioni",lat:"39,13744722",lon:"16,11226944"},
+{id:53,scheda:"01/I309/CS/18",prov:"Cosenza",comune:"Santa Sofia D'Epiro",loc:"Contrada Acci",alt:195,urbano:"no",sci:"Fraxinus angustifolia Vahl subsp. oxycarpa (Willd.) Franco & Rocha Afonso",name:"Frassino meridionale",circ:"250",h:"18",crit:"a) eta` e/o dimensioni\nb) forma e portamento\nc) valore ecologico",lat:"39,60173333",lon:"16,30785833"},
+{id:54,scheda:"01/I192/CS/18",prov:"Cosenza",comune:"Sant'Agata di Esaro",loc:"Serra La Croce",alt:1406,urbano:"no",sci:"Pinus heldreichii Christ syn Pinus leucodermis Antoine",name:"Pino loricato",circ:"220-225-370-325",h:"17",crit:"a) età e/o dimensioni\nb) forma e portamento\nc) valore ecologico\nd) rarità botanica\nf) pregio paesaggistico\ng) valore storico, culturale, religioso",lat:"39,65138889",lon:"15,92083333"},
+{id:55,scheda:"01/I650/CS/18",prov:"Cosenza",comune:"Serra Pedace",loc:"Piazza Vittorio Veneto",alt:738,urbano:"sì",sci:"Populus nigra L.",name:"Pioppo nero",circ:"420",h:"12,5",crit:"a) età e/o dimensioni\nb) forma e portamento\ng) valore storico, culturale, religioso",lat:"39,27746944",lon:"16,34597222"},
+{id:56,scheda:"01/I896/CS/18",prov:"Cosenza",comune:"Spezzano della Sila",loc:"Cozzo del Principe",alt:1498,urbano:"no",sci:"Pinus nigra subsp. laricio Maire",name:"Pino laricio",circ:"370",h:"14,5",crit:"a) età e/o dimensioni\nb) forma e portamento",lat:"39,37416667",lon:"16,58138889"},
+{id:57,scheda:"02/I896/CS/18",prov:"Cosenza",comune:"Spezzano della Sila",loc:"Fallistro",alt:1428,urbano:"no",sci:"Insieme omogeneo di Pinus nigra subsp. laricio Maire",name:"Pino laricio",circ:"403 (med) / 584 (max)",h:"35,0 (med) / 43,5 (max)",crit:"a) età e/o dimensioni\nb) forma e portamento\nc) valore ecologico\nf) pregio paesaggistico\ng) valore storico, culturale, religioso",lat:"39,32462778",lon:"16,46716944"},
+{id:58,scheda:"01/I898/CS/18",prov:"Cosenza",comune:"Spezzano Piccolo",loc:"Righio di Campagna",alt:1341,urbano:"no",sci:"Insieme omogeneo di Acer pseudoplatanus L.",name:"Acero di monte",circ:"400 (med) / 495 (max)",h:"18,0 (med) / 18,0 (max)",crit:"a) età e/o dimensioni",lat:"39,32514167",lon:"16,52987222"},
+{id:59,scheda:"02/I898/CS/18",prov:"Cosenza",comune:"Spezzano Piccolo",loc:"Salesiani",alt:1402,urbano:"no",sci:"Abies alba Mill.",name:"Abete bianco",circ:"400",h:"15",crit:"a) età e/o dimensioni\nb) forma e portamento",lat:"39,30576944",lon:"16,49897778"},
+{id:60,scheda:"01/L134/CS/18",prov:"Cosenza",comune:"Terravecchia",loc:"Piazza del Popolo",alt:460,urbano:"sì",sci:"Ulmus minor Mill.",name:"Olmo campestre",circ:"263",h:"8,5",crit:"a) età e/o dimensioni\nb) forma e portamento\ne) architettura vegetale\ng) valore storico, culturale, religioso",lat:"39,46548056",lon:"16,94613889"},
+{id:61,scheda:"01/L353/CS/18",prov:"Cosenza",comune:"Trebisacce",loc:"Via Tacito 21",alt:90,urbano:"sì",sci:"Ceratonia siliqua L.",name:"Carrubo",circ:"360",h:"12",crit:"a) età e/o dimensioni",lat:"39,87031667",lon:"16,52627778"},
+{id:62,scheda:"03/L353/CS/18",prov:"Cosenza",comune:"Trebisacce",loc:"Monte Mostarico",alt:730,urbano:"no",sci:"Insieme omogeneo di Quercus pubescens Willd.",name:"Roverella",circ:"400 (med) / 410 (max)",h:"12,0 (med) / 15,0 (max)",crit:"a) età e/o dimensioni\nc) valore ecologico\nf) pregio paesaggistico",lat:"39,892125",lon:"16,49427778"},
+{id:63,scheda:"08/L353/CS/18",prov:"Cosenza",comune:"Trebisacce",loc:"Pagliara - Svincolo Trebisacce Nord",alt:32,urbano:"no",sci:"Pinus halepensis Mill.",name:"Pino d'Aleppo",circ:"430",h:"19,5",crit:"a) età e/o dimensioni\ne) architettura vegetale",lat:"39,88681389",lon:"16,54781944"},
+{id:64,scheda:"01/C725/KR/18",prov:"Crotone",comune:"Cirò",loc:"Solaggio",alt:62,urbano:"no",sci:"Fraxinus excelsior L.",name:"Frassino maggiore",circ:"265",h:"19",crit:"b) forma e portamento\nf) pregio paesaggistico",lat:"39,40402222",lon:"17,080475"},
+{id:65,scheda:"02/C726/KR/18",prov:"Crotone",comune:"Cirò Marina",loc:"Torrenova",alt:6,urbano:"no",sci:"Eucalyptus camaldulensis Dehnh.",name:"Eucalipto rostrato",circ:"535",h:"22",crit:"a) età e/o dimensioni",lat:"39,35777222",lon:"17,12508889"},
+{id:66,scheda:"02/D123/KR/18",prov:"Crotone",comune:"Cotronei",loc:"Brunara",alt:1112,urbano:"no",sci:"Acer pseudoplatanus L.",name:"Acero di monte",circ:"330",h:"24",crit:"a) età e/o dimensioni",lat:"39,1636",lon:"16,6775"},
+{id:67,scheda:"04/D123/KR/18",prov:"Crotone",comune:"Cotronei",loc:"Brunara",alt:1108,urbano:"no",sci:"Quercus petraea subsp. austrotyrrhenica Brullo, R.Guarino & Siracusa",name:"Rovere",circ:"320",h:"24",crit:"d) rarità botanica",lat:"39,16333333",lon:"16,67833333"},
+{id:68,scheda:"01/D122/KR/18",prov:"Crotone",comune:"Crotone",loc:"Villa Comunale",alt:10,urbano:"si`",sci:"Ficus macrophylla Desf. ex Pers.",name:"Fico magnolioide",circ:"480",h:"15",crit:"b) forma e portamento",lat:"39,08249444",lon:"17,13093056"},
+{id:69,scheda:"01/D189/KR/18",prov:"Crotone",comune:"Crucoli",loc:"Valle di Canne - Piana della Signora",alt:32,urbano:"no",sci:"Quercus pubescens Willd.",name:"Roverella",circ:"465",h:"21",crit:"a) età e/o dimensioni",lat:"39,45052778",lon:"17,03425"},
+{id:70,scheda:"01/F157/KR/18",prov:"Crotone",comune:"Mesoraca",loc:"Villetta San Nicola - Via Xx Settembre 10",alt:413,urbano:"sì",sci:"Cedrus libani A.Richard",name:"Cedro del Libano",circ:"455",h:"22",crit:"a) età e/o dimensioni",lat:"39,08119722",lon:"16,78753611"},
+{id:71,scheda:"02/F157/KR/18",prov:"Crotone",comune:"Mesoraca",loc:"Campo Sportivo",alt:442,urbano:"no",sci:"Quercus suber L.",name:"Sughera",circ:"370",h:"17",crit:"a) età e/o dimensioni\nb) forma e portamento",lat:"39,08775556",lon:"16,79833611"},
+{id:72,scheda:"04/F157/KR/18",prov:"Crotone",comune:"Mesoraca",loc:"Villaggio Fratta",alt:1490,urbano:"no",sci:"Fagus sylvatica L.",name:"Faggio",circ:"480",h:"37",crit:"a) età e/o dimensioni",lat:"39,09777778",lon:"16,69813333"},
+{id:73,scheda:"05/F157/KR/18",prov:"Crotone",comune:"Mesoraca",loc:"Timpone Cucumilia - Monte Femminamorta",alt:1632,urbano:"no",sci:"Abies alba Mill.",name:"Abete bianco",circ:"540",h:"33",crit:"a) età e/o dimensioni",lat:"39,11078333",lon:"16,66895556"},
+{id:74,scheda:"03/G508/KR/18",prov:"Crotone",comune:"Petilia Policastro",loc:"Macinello",alt:1526,urbano:"no",sci:"Pinus nigra subsp. laricio Maire",name:"Pino laricio",circ:"510",h:"37,5",crit:"a) età e/o dimensioni\nb) forma e portamento",lat:"39,12881944",lon:"16,67413611"},
+{id:75,scheda:"04/G508/KR/18",prov:"Crotone",comune:"Petilia Policastro",loc:"Villaggio Principe",alt:1485,urbano:"no",sci:"Insieme omogeneo di Pinus nigra subsp. laricio Maire",name:"Pino laricio",circ:"450 (med) / 505 (max)",h:"30,0 (med) / 31,0 (max)",crit:"a) età e/o dimensioni",lat:"39,12906111",lon:"16,706"},
+{id:76,scheda:"01/H383/KR/18",prov:"Crotone",comune:"Roccabernarda",loc:"Piazza Aldo Barbaro",alt:200,urbano:"sì",sci:"Ulmus minor Mill.",name:"Olmo campestre",circ:"425",h:"26",crit:"a) età e/o dimensioni",lat:"39,13413889",lon:"16,86960278"},
+{id:77,scheda:"01/I308/KR/18",prov:"Crotone",comune:"Santa Severina",loc:"Altilia",alt:181,urbano:"no",sci:"Pinus pinea L.",name:"Pino domestico",circ:"460",h:"24",crit:"a) età e/o dimensioni",lat:"39,18010278",lon:"16,87268611"},
+{id:78,scheda:"01/A544/RC/18",prov:"Reggio di Calabria",comune:"Bagaladi",loc:"Colonia di Chiera",alt:1590,urbano:"no",sci:"Insieme omogeneo di Abies alba Mill.",name:"Abete bianco",circ:"355 (med) / 365 (max)",h:"26,0 (med) / 26,0 (max)",crit:"a) età e/o dimensioni",lat:"38,10880556",lon:"15,86069444"},
+{id:79,scheda:"01/A897/RC/18",prov:"Reggio di Calabria",comune:"Bivongi",loc:"Vallone Folea",alt:660,urbano:"no",sci:"Alnus glutinosa (L.) Gaertn.",name:"Ontano nero",circ:"350",h:"20",crit:"a) eta` e/o dimensioni\nb) forma e portamento\nf) pregio paesaggistico",lat:"38,50218333",lon:"16,39793611"},
+{id:80,scheda:"02/B756/RC/18",prov:"Reggio di Calabria",comune:"Cardeto",loc:"Mano di Maddà",alt:1670,urbano:"no",sci:"Abies alba Mill.",name:"Abete bianco",circ:"470",h:"25",crit:"a) età e/o dimensioni",lat:"38,11888889",lon:"15,86638889"},
+{id:81,scheda:"01/C747/RC/18",prov:"Reggio di Calabria",comune:"Cittanova",loc:"Villa Comunale Carlo Ruggiero",alt:425,urbano:"sì",sci:"Sequoia sempervirens (D. Don) Endl.",name:"Sequoia sempreverde",circ:"435",h:"34",crit:"a) età e/o dimensioni\nb) forma e portamento\nd) rarità botanica",lat:"38,35",lon:"16,08333333"},
+{id:82,scheda:"03/C747/RC/18",prov:"Reggio di Calabria",comune:"Cittanova",loc:"Villa Comunale Carlo Ruggero",alt:400,urbano:"sì",sci:"Pinus strobus L.",name:"Pino strobo",circ:"380",h:"35",crit:"a) età e/o dimensioni\nd) rarità botanica",lat:"38,34997778",lon:"16,08342778"},
+{id:83,scheda:"01/C954/RC/18",prov:"Reggio di Calabria",comune:"Condofuri",loc:"Gallicianò",alt:520,urbano:"no",sci:"Populus nigra L.",name:"Pioppo nero",circ:"530",h:"27",crit:"a) età e/o dimensioni",lat:"38,01722222",lon:"15,88972222"},
+{id:84,scheda:"01/D619/RC/18",prov:"Reggio di Calabria",comune:"Fiumara",loc:"Contrada Baglio",alt:543,urbano:"no",sci:"Quercus pubescens Willd.",name:"Roverella",circ:"500",h:"25",crit:"a) età e/o dimensioni",lat:"38,22333333",lon:"15,70944444"},
+{id:85,scheda:"01/F301/RC/18",prov:"Reggio di Calabria",comune:"Molochio",loc:"Trepidò",alt:975,urbano:"no",sci:"Fagus sylvatica L.",name:"Faggio",circ:"510",h:"23",crit:"a) età e/o dimensioni",lat:"38,27809722",lon:"16,05000556"},
+{id:86,scheda:"01/G082/RC/18",prov:"Reggio di Calabria",comune:"Oppido Mamertina",loc:"Largo San Francesco",alt:295,urbano:"sì",sci:"Pinus pinea L.",name:"Pino domestico",circ:"480",h:"25",crit:"a) età e/o dimensioni",lat:"38,29697778",lon:"15,98337222"},
+{id:87,scheda:"01/H224/RC/18",prov:"Reggio di Calabria",comune:"Reggio di Calabria",loc:"Tre Aie",alt:1342,urbano:"no",sci:"Insieme omogeneo di Abies alba Mill.",name:"Abete bianco",circ:"340 (med) / 411 (max)",h:"35,0 (med) / 36,0 (max)",crit:"a) età e/o dimensioni\nf) pregio paesaggistico",lat:"38,15649722",lon:"15,83314167"},
+{id:88,scheda:"02/H224/RC/18",prov:"Reggio di Calabria",comune:"Reggio di Calabria",loc:"Gornelle",alt:1380,urbano:"no",sci:"Fagus sylvatica L.",name:"Faggio",circ:"536",h:"25",crit:"a) età e/o dimensioni\nb) forma e portamento",lat:"38,13839722",lon:"15,83544722"},
+{id:89,scheda:"03/H224/RC/18",prov:"Reggio di Calabria",comune:"Reggio di Calabria",loc:"Tre Aie",alt:1317,urbano:"no",sci:"Fagus sylvatica L.",name:"Faggio",circ:"560",h:"20",crit:"a) età e/o dimensioni",lat:"38,15161111",lon:"15,831775"},
+{id:90,scheda:"05/H224/RC/18",prov:"Reggio di Calabria",comune:"Reggio di Calabria",loc:"Fragolara",alt:1350,urbano:"no",sci:"Pinus nigra subsp. laricio Maire",name:"Pino laricio",circ:"355",h:"20",crit:"b) forma e portamento",lat:"38,150475",lon:"15,83212222"},
+{id:91,scheda:"06/H224/RC/18",prov:"Reggio di Calabria",comune:"Reggio di Calabria",loc:"Due Fiumare",alt:780,urbano:"no",sci:"Eucalyptus camaldulensis Dehnh.",name:"Eucalitto rostrato",circ:"570",h:"30",crit:"a) età e/o dimensioni",lat:"38,16340556",lon:"15,80771111"},
+{id:92,scheda:"07/H224/RC/18",prov:"Reggio di Calabria",comune:"Reggio di Calabria",loc:"Marrappa",alt:1156,urbano:"no",sci:"Platanus acerifolia (Aiton) Willd.",name:"Platano comune",circ:"393",h:"28",crit:"a) eta` e/o dimensioni\nb) forma e portamento",lat:"38,15305556",lon:"15,80416667"},
+{id:93,scheda:"01/H489/RC/18",prov:"Reggio di Calabria",comune:"Roghudi",loc:"Piscopio",alt:1346,urbano:"no",sci:"Alnus glutinosa (L.) Gaertn.",name:"Ontano nero",circ:"540",h:"18",crit:"a) età e/o dimensioni\nb) forma e portamento",lat:"38,12111111",lon:"15,90472222"},
+{id:94,scheda:"02/H013/RC/18",prov:"Reggio di Calabria",comune:"Samo",loc:"Ferraina",alt:1363,urbano:"no",sci:"Quercus petraea subsp. austrotyrrhenica Brullo, R.Guarino & Siracusa",name:"Rovere",circ:"620",h:"20",crit:"a) età e/o dimensioni",lat:"38,11559722",lon:"15,953125"},
+{id:95,scheda:"05/H013/RC/18",prov:"Reggio di Calabria",comune:"Samo",loc:"Canovai Ferraina",alt:1474,urbano:"no",sci:"Insieme omogeneo di Quercus cerris L. x Quercus pubescens Willd.",name:"Cerro-Roverella",circ:"485 (med) / 575 (max)",h:"17,0 (med) / 20,0 (max)",crit:"a) età e/o dimensioni\nd) rarità botanica",lat:"38,12508611",lon:"15,95796944"},
+{id:96,scheda:"06/H013/RC/18",prov:"Reggio di Calabria",comune:"Samo",loc:"Croce di Dio Lodato",alt:1435,urbano:"no",sci:"Quercus cerris L. x Quercus pubescens Willd.",name:"Cerro-Roverella",circ:"530",h:"13",crit:"b) forma e portamento\nd) rarità botanica",lat:"38,11667778",lon:"15,965"},
+{id:97,scheda:"07/H013/RC/18",prov:"Reggio di Calabria",comune:"Samo",loc:"Croce di Belli",alt:1381,urbano:"no",sci:"Quercus cerris L. x Quercus pubescens Willd.",name:"Cerro-Roverella",circ:"660",h:"20",crit:"a) età e/o dimensioni",lat:"38,11794722",lon:"15,96240833"},
+{id:98,scheda:"08/H013/RC/18",prov:"Reggio di Calabria",comune:"Samo",loc:"Canovai - Ferraina",alt:1384,urbano:"no",sci:"Pinus nigra subsp. laricio Maire",name:"Pino laricio",circ:"475",h:"25",crit:"a) eta` e/o dimensioni\nb) forma e portamento",lat:"38,12658889",lon:"15,95151667"},
+{id:99,scheda:"09/H013/RC/18",prov:"Reggio di Calabria",comune:"Samo",loc:"Foresta di Ferraina",alt:1404,urbano:"no",sci:"Quercus petraea (Matt.) Liebl. subsp. austrotyrrhenica Brullo, Guarino & Siracusa",name:"Rovere meridionale",circ:"595",h:"22",crit:"a) eta` e/o dimensioni\nb) forma e portamento",lat:"38,12351111",lon:"15,95479722"},
+{id:100,scheda:"01/H959/RC/18",prov:"Reggio di Calabria",comune:"San Lorenzo",loc:"Piazza Regina Margherita",alt:770,urbano:"sì",sci:"Ulmus minor Mill.",name:"Olmo campestre",circ:"510",h:"10",crit:"a) età e/o dimensioni\nb) forma e portamento\ng) valore storico, culturale, religioso",lat:"38,0109",lon:"15,83310833"},
+{id:101,scheda:"01/H970/RC/18",prov:"Reggio di Calabria",comune:"San Luca",loc:"San Giorgio di Pietracappa",alt:694,urbano:"no",sci:"Castanea sativa Mill.",name:"Castagno",circ:"640",h:"14",crit:"a) età e/o dimensioni\nb) forma e portamento",lat:"38,17807778",lon:"16,02625556"},
+{id:102,scheda:"02/H970/RC/18",prov:"Reggio di Calabria",comune:"San Luca",loc:"Fontanelle",alt:690,urbano:"no",sci:"Castanea sativa Mill.",name:"Castagno",circ:"950",h:"16",crit:"a) età e/o dimensioni\nb) forma e portamento",lat:"38,17498611",lon:"16,02174167"},
+{id:103,scheda:"01/I176/RC/18",prov:"Reggio di Calabria",comune:"Santa Cristina D'Aspromonte",loc:"Zervò",alt:1180,urbano:"no",sci:"Taxus baccata L.",name:"Tasso",circ:"320",h:"15",crit:"a) età e/o dimensioni\nb) forma e portamento\nd) rarità botanica",lat:"38,22270278",lon:"16,00266389"},
+{id:104,scheda:"02/I176/RC/18",prov:"Reggio di Calabria",comune:"Santa Cristina D'Aspromonte",loc:"Zervò",alt:1180,urbano:"no",sci:"Abies alba Mill.",name:"Abete bianco",circ:"490",h:"30",crit:"a) età e/o dimensioni",lat:"38,22224444",lon:"16,00285278"},
+{id:105,scheda:"03/I176/RC/18",prov:"Reggio di Calabria",comune:"Santa Cristina D'Aspromonte",loc:"Zervò - Ex Sanatorio Vittorio Emanuele Iii",alt:1140,urbano:"no",sci:"Insieme omogeneo di Abies alba Mill.",name:"Abete bianco",circ:"406 (med) / 490 (max)",h:"30,0 (med) / 31,0 (max)",crit:"a) età e/o dimensioni",lat:"38,22354722",lon:"15,99486944"},
+{id:106,scheda:"01/I333/RC/18",prov:"Reggio di Calabria",comune:"Sant'Eufemia D'Aspromonte",loc:"Serra Petrulli",alt:1178,urbano:"no",sci:"Pinus nigra subsp. laricio Maire",name:"Pino laricio",circ:"475",h:"30",crit:"a) età e/o dimensioni\nb) forma e portamento\ng) valore storico, culturale, religioso",lat:"38,20194444",lon:"15,85708611"},
+{id:107,scheda:"01/I371/RC/18",prov:"Reggio di Calabria",comune:"Santo Stefano in Aspromonte",loc:"Gambarie - Via Giuseppe Garibaldi 2",alt:1324,urbano:"sì",sci:"Calocedrus decurrens (Torr.) Florin",name:"Libocedro",circ:"475",h:"25",crit:"a) età e/o dimensioni\nb) forma e portamento\nd) rarità botanica",lat:"38,16835278",lon:"15,838475"},
+{id:108,scheda:"01/I537/RC/18",prov:"Reggio di Calabria",comune:"Scilla",loc:"Abetazzo",alt:1576,urbano:"no",sci:"Abies alba Mill.",name:"Abete bianco",circ:"495",h:"25",crit:"a) età e/o dimensioni\nb) forma e portamento",lat:"38,17451667",lon:"15,86488611"},
+{id:109,scheda:"01/I725/RC/18",prov:"Reggio di Calabria",comune:"Siderno",loc:"Latticugna",alt:200,urbano:"sì",sci:"Quercus virgiliana (Ten.) Ten.",name:"Quercia castagnara",circ:"493",h:"20",crit:"a) età e/o dimensioni",lat:"38,27592222",lon:"16,28541389"},
+{id:110,scheda:"02/I725/RC/18",prov:"Reggio di Calabria",comune:"Siderno",loc:"Fondazione Monaca di Bello",alt:23,urbano:"sì",sci:"Insieme omogeneo di Quercus pubescens Willd.",name:"Roverella",circ:"430 (med) / 484 (max)",h:"19,0 (med) / 20,0 (max)",crit:"a) età e/o dimensioni",lat:"38,27051389",lon:"16,28720278"},
+{id:111,scheda:"01/L673/RC/18",prov:"Reggio di Calabria",comune:"Varapodio",loc:"Ligoni",alt:150,urbano:"no",sci:"Olea europaea L.",name:"Olivo",circ:"750",h:"27",crit:"a) eta` e/o dimensioni",lat:"38,3325",lon:"15,99305556"},
+{id:112,scheda:"02/A386/VV/18",prov:"Vibo Valentia",comune:"Arena",loc:"Tre Aie",alt:1056,urbano:"no",sci:"Abies alba Mill.",name:"Abete bianco",circ:"520",h:"32",crit:"a) età e/o dimensioni\nb) forma e portamento",lat:"38,54706389",lon:"16,28926667"},
+{id:113,scheda:"01/D453/VV/18",prov:"Vibo Valentia",comune:"Fabrizia",loc:"Sierru",alt:1000,urbano:"no",sci:"Castanea sativa Mill.",name:"Castagno",circ:"565",h:"26",crit:"a) età e/o dimensioni",lat:"38,47446389",lon:"16,330625"},
+{id:114,scheda:"01/F364/VV/18",prov:"Vibo Valentia",comune:"Mongiana",loc:"Fontanelle",alt:1050,urbano:"no",sci:"Abies alba Mill.",name:"Abete bianco",circ:"460",h:"35",crit:"a) età e/o dimensioni\nc) valore ecologico\ng) valore storico, culturale, religioso",lat:"38,51116667",lon:"16,29201667"},
+{id:115,scheda:"01/I639/VV/18",prov:"Vibo Valentia",comune:"Serra San Bruno",loc:"Castagnara",alt:855,urbano:"no",sci:"Taxus baccata L.",name:"Tasso",circ:"250",h:"20",crit:"a) età e/o dimensioni\nc) valore ecologico",lat:"38,551375",lon:"16,30918056"},
+{id:116,scheda:"03/I639/VV/18",prov:"Vibo Valentia",comune:"Serra San Bruno",loc:"Santa Maria del Bosco",alt:850,urbano:"no",sci:"Abies alba Mill.",name:"Abete bianco",circ:"390",h:"33",crit:"a) età e/o dimensioni\nb) forma e portamento\nc) valore ecologico",lat:"38,56085",lon:"16,31618333"},
+{id:117,scheda:"05/I639/VV/18",prov:"Vibo Valentia",comune:"Serra San Bruno",loc:"Rosarella",alt:950,urbano:"no",sci:"Abies alba Mill.",name:"Abete bianco",circ:"470",h:"30",crit:"a) eta` e/o dimensioni",lat:"38,55550556",lon:"16,33625556"},
+{id:118,scheda:"06/I639/VV/18",prov:"Vibo Valentia",comune:"Serra San Bruno",loc:"Bosco Archiforo",alt:1327,urbano:"no",sci:"Insieme omogeneo di Abies alba Mill.",name:"Abete bianco",circ:"427 (med) / 450 (max)",h:"45,0 (max)",crit:"a) eta` e/o dimensioni\nb) forma e portamento",lat:"38,53783611",lon:"16,345025"},
+{id:119,scheda:"01/I744/VV/18",prov:"Vibo Valentia",comune:"Simbario",loc:"Trainaro",alt:762,urbano:"no",sci:"Quercus pubescens Willd.",name:"Roverella",circ:"620",h:"21",crit:"a) eta` e/o dimensioni\nc) valore ecologico",lat:"38,61429444",lon:"16,34830556"}
+];
+
+/* ---------------- Normalize ---------------- */
+function toDecimal(s) { return parseFloat(String(s).replace(",", ".")); }
+function firstNumber(s) {
+  const m = String(s).replace(",", ".").match(/-?\d+(\.\d+)?/);
+  return m ? parseFloat(m[0]) : NaN;
+}
+const TREES = RAW_TREES.map(t => {
+  const urbanoBool = /^s/i.test(String(t.urbano).trim());
+  const critList = t.crit.split("\n").map(c => c.replace(/eta`/g, "età").trim());
+  return {
+    ...t,
+    lat: toDecimal(t.lat),
+    lon: toDecimal(t.lon),
+    urbanoBool,
+    urbanoLabel: urbanoBool ? "Sì" : "No",
+    critList,
+  };
+});
+
+/* ---------------- Filter option lists ---------------- */
+const provincie = [...new Set(TREES.map(t => t.prov))].sort((a, b) => a.localeCompare(b, "it"));
+const specie = [...new Set(TREES.map(t => t.name))].sort((a, b) => a.localeCompare(b, "it"));
+
+const provSelect = document.getElementById("f-provincia");
+provincie.forEach(p => {
+  const opt = document.createElement("option");
+  opt.value = p; opt.textContent = p;
+  provSelect.appendChild(opt);
+});
+const specieSelect = document.getElementById("f-specie");
+specie.forEach(s => {
+  const opt = document.createElement("option");
+  opt.value = s; opt.textContent = s;
+  specieSelect.appendChild(opt);
+});
+
+/* ---------------- Map setup ---------------- */
+const map = L.map("map");
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors'
+}).addTo(map);
+
+const allBounds = L.latLngBounds(TREES.map(t => [t.lat, t.lon]));
+map.fitBounds(allBounds, { padding: [20, 20] });
+
+const clusterGroup = L.markerClusterGroup({ maxClusterRadius: 50 });
+map.addLayer(clusterGroup);
+
+const markersById = new Map();
+
+function popupHtml(t) {
+  const criteriaHtml = t.critList.map(c => `<span class="popup-crit">${c}</span>`).join("<br>");
+  return `
+    <b class="popup-title">${t.name}</b> <span class="sci">${t.sci}</span><br>
+    ${t.comune} (${t.prov}) &mdash; ${t.loc}<br>
+    Altitudine: ${t.alt} m s.l.m. &middot; Contesto urbano: ${t.urbanoLabel}<br>
+    Circonferenza fusto: ${t.circ} cm &middot; Altezza: ${t.h} m<br>
+    ${criteriaHtml}<br>
+    <code class="scheda">Scheda ${t.scheda}</code>
+  `;
+}
+
+function buildMarker(t) {
+  const marker = L.marker([t.lat, t.lon]);
+  marker.bindPopup(popupHtml(t));
+  marker.on("click", () => highlightRow(t.id));
+  markersById.set(t.id, marker);
+  return marker;
+}
+
+/* ---------------- Table rendering ---------------- */
+const tbody = document.getElementById("trees-tbody");
+const resultCount = document.getElementById("result-count");
+
+const COLUMN_TYPES = { alt: "num", circ: "num", h: "num" };
+let sortState = { key: "prov", dir: 1 };
+
+function sortValue(t, key) {
+  if (COLUMN_TYPES[key] === "num") return firstNumber(t[key]);
+  if (key === "crit") return t.critList.join("; ");
+  if (key === "urbano") return t.urbanoLabel;
+  return String(t[key] ?? "");
+}
+
+function compareTrees(a, b) {
+  const va = sortValue(a, sortState.key);
+  const vb = sortValue(b, sortState.key);
+  let cmp;
+  if (typeof va === "number" && typeof vb === "number") {
+    cmp = (isNaN(va) ? -Infinity : va) - (isNaN(vb) ? -Infinity : vb);
+  } else {
+    cmp = String(va).localeCompare(String(vb), "it", { sensitivity: "base" });
+  }
+  return cmp * sortState.dir;
+}
+
+function renderCritBadges(list) {
+  return list.map(c => `<span class="badge">${c}</span>`).join("");
+}
+
+function renderTable(list) {
+  tbody.innerHTML = list.map(t => `
+    <tr data-id="${t.id}">
+      <td>${t.prov}</td>
+      <td>${t.comune}</td>
+      <td class="wrap">${t.loc}</td>
+      <td>${t.name}<span class="sci">${t.sci}</span></td>
+      <td>${t.alt}</td>
+      <td>${t.circ}</td>
+      <td>${t.h}</td>
+      <td><span class="badge ${t.urbanoBool ? "urb" : "rur"}">${t.urbanoLabel}</span></td>
+      <td class="wrap">${renderCritBadges(t.critList)}</td>
+      <td><code class="scheda">${t.scheda}</code></td>
+      <td><button type="button" class="btn-locate" data-id="${t.id}">Mappa</button></td>
+    </tr>
+  `).join("");
+}
+
+function highlightRow(id) {
+  [...tbody.querySelectorAll("tr")].forEach(tr => tr.classList.toggle("highlight", Number(tr.dataset.id) === id));
+  const row = tbody.querySelector(`tr[data-id="${id}"]`);
+  if (row) row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
+function locateOnMap(id) {
+  const marker = markersById.get(id);
+  if (!marker) return;
+  const t = TREES.find(tr => tr.id === id);
+  clusterGroup.zoomToShowLayer(marker, () => {
+    marker.openPopup();
+    map.panTo([t.lat, t.lon]);
+  });
+  highlightRow(id);
+}
+
+tbody.addEventListener("click", (ev) => {
+  const btn = ev.target.closest(".btn-locate");
+  const row = ev.target.closest("tr[data-id]");
+  const id = Number((btn || row)?.dataset.id);
+  if (!isNaN(id)) locateOnMap(id);
+});
+
+document.querySelectorAll("#trees-table thead th[data-key]").forEach(th => {
+  th.addEventListener("click", () => {
+    const key = th.dataset.key;
+    sortState.dir = (sortState.key === key) ? -sortState.dir : 1;
+    sortState.key = key;
+    document.querySelectorAll("#trees-table thead th .arrow").forEach(a => a.remove());
+    const arrow = document.createElement("span");
+    arrow.className = "arrow";
+    arrow.textContent = sortState.dir === 1 ? "▲" : "▼";
+    th.appendChild(arrow);
+    applyFilters();
+  });
+});
+
+/* ---------------- Filtering ---------------- */
+const searchInput = document.getElementById("f-search");
+const resetBtn = document.getElementById("reset-btn");
+
+function matchesFilters(t, q, prov, spec) {
+  if (prov && t.prov !== prov) return false;
+  if (spec && t.name !== spec) return false;
+  if (q) {
+    const haystack = `${t.prov} ${t.comune} ${t.loc} ${t.name} ${t.sci}`.toLowerCase();
+    if (!haystack.includes(q)) return false;
+  }
+  return true;
+}
+
+function applyFilters() {
+  const q = searchInput.value.trim().toLowerCase();
+  const prov = provSelect.value;
+  const spec = specieSelect.value;
+
+  const filtered = TREES.filter(t => matchesFilters(t, q, prov, spec));
+  filtered.sort(compareTrees);
+
+  renderTable(filtered);
+  resultCount.innerHTML = `<strong>${filtered.length}</strong> su ${TREES.length} alberi`;
+
+  clusterGroup.clearLayers();
+  const markers = filtered.map(t => markersById.get(t.id) || buildMarker(t));
+  clusterGroup.addLayers(markers);
+}
+
+TREES.forEach(buildMarker);
+clusterGroup.addLayers([...markersById.values()]);
+
+searchInput.addEventListener("input", applyFilters);
+provSelect.addEventListener("change", applyFilters);
+specieSelect.addEventListener("change", applyFilters);
+resetBtn.addEventListener("click", () => {
+  searchInput.value = "";
+  provSelect.value = "";
+  specieSelect.value = "";
+  applyFilters();
+});
+
+applyFilters();
+</script>
+</body>
+</html>
