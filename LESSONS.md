@@ -3,6 +3,46 @@
 This file collects reusable, non-sensitive lessons discovered while working on this
 repository. Read it at the start of every session before making changes.
 
+## MCP server security (2026-07-02 assessment)
+
+- Official reference for MCP-specific threats: the MCP spec's own
+  [Security Best Practices](https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices)
+  page (complements OAuth 2.0 best practices, RFC 9700). Key attack classes documented there:
+  Confused Deputy (OAuth proxy w/ static client ID), Token Passthrough (never forward a client's
+  token to a downstream API unvalidated), SSRF (validate/allowlist OAuth discovery URLs, block
+  private/link-local IP ranges incl. `169.254.169.254`), Session Hijacking (stateful HTTP servers
+  with guessable/shared session IDs), Local MCP Server Compromise (stdio servers should restrict
+  HTTP exposure via token/IPC, never trust unverified startup commands), OAuth Authorization URL
+  Validation (reject `javascript:`/`data:` schemes), Scope Minimization (no wildcard scopes).
+- `createMcpExpressApp({ host })` (`@modelcontextprotocol/sdk/server/express.js`) only adds DNS
+  rebinding (Host header) protection automatically when `host` is `127.0.0.1`/`localhost`/`::1`
+  (the default). If you ever pass `host: '0.0.0.0'` for a container/public deploy, the SDK just
+  logs a `console.warn` — it does NOT add authentication or block anything. Binding to a
+  non-loopback host safely requires adding your own auth (bearer token, reverse-proxy auth, IP
+  allowlist) before doing so; don't rely on the SDK helper alone once you leave loopback.
+  `createMcpExpressApp` also runs `express.json()` (default ~100kb body limit, a decent built-in
+  guard) and does **not** add any CORS headers by default — verified by reading the SDK's own
+  `express.js` source, not assumed.
+- Any error thrown inside a `registerTool` handler is caught by the SDK's own dispatcher and
+  turned into a normal tool result (`{ isError: true, content: [{ type: 'text', text:
+  error.message }] }`) — verified by reading `server/mcp.js`. This means whatever string ends up
+  in a thrown `Error`'s `.message` is sent verbatim to the MCP client; keep custom error classes
+  (e.g. wrapping an upstream API's error) from leaking internal paths/stack/DNS details, even
+  though the process itself won't crash.
+- For a read-only, no-secrets, public-open-data CKAN proxy server: the main residual security
+  properties worth checking are (a) the upstream base URL is only configurable via a server-side
+  env var, never per-request client input (no SSRF surface), (b) every numeric "how many rows/
+  items" tool parameter has a `.max()` cap for consistency and to bound response size/cost — CKAN
+  wrapper tools tend to accumulate this pattern unevenly as they're added one at a time, so it's
+  worth auditing all of them together rather than trusting the pattern was copy-pasted correctly
+  everywhere, (c) outbound fetches have a timeout (`AbortSignal.timeout`), (d) tool outputs that
+  pass through third-party-authored free text (dataset descriptions, CSV cell values) are
+  inherently an indirect-prompt-injection surface — nothing to fix server-side, but worth noting
+  in the security review since it's easy to overlook for "just a data API wrapper" tools.
+- `pnpm audit` needs a lockfile-aware, workspace-installed `node_modules` (fails with
+  `ENOLOCK`/`loadVirtual requires existing shrinkwrap file` if run against a bare `npm audit` in
+  a pnpm project) — run `pnpm audit`, not `npm audit`, in a pnpm workspace.
+
 ## MCP TypeScript SDK
 
 - As of 2026-07-01: `@modelcontextprotocol/sdk` v1.29.0 is the stable, production-ready
